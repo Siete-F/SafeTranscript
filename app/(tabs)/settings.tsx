@@ -187,6 +187,9 @@ export default function SettingsScreen() {
             <Text style={styles.keyStatus}>
               Current: {mistralKeyDisplay}
             </Text>
+            <Text style={styles.keyNote}>
+              Used for Voxtral Transcribe 2 audio transcription and LLM processing
+            </Text>
             <TextInput
               style={styles.input}
               placeholder="Enter new Mistral API key"
@@ -311,6 +314,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     marginBottom: 12,
+  },
+  keyNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 12,
+    fontStyle: 'italic',
   },
   input: {
     backgroundColor: colors.background,
