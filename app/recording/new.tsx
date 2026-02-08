@@ -25,6 +25,38 @@ import { authenticatedGet, authenticatedPost, BACKEND_URL } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
 import { getBearerToken } from '@/utils/api';
 
+/**
+ * Allowed audio file extensions for recording uploads.
+ * These formats are supported by the expo-audio recorder and the backend transcription service.
+ * Note: The backend accepts any audio format and converts it as needed for transcription.
+ */
+const ALLOWED_AUDIO_EXTENSIONS = ['m4a', 'mp3', 'wav', 'caf', 'aac'];
+
+/**
+ * Extract and validate file extension from audio URI.
+ * Falls back to 'm4a' (the default expo-audio format) if the extension is unrecognized.
+ * This is safe because the backend accepts and converts any audio format.
+ * 
+ * @param uri The audio file URI
+ * @returns Validated file extension, defaults to 'm4a' if invalid
+ */
+function extractFileExtension(uri: string): string {
+  // Remove query parameters if present
+  const uriWithoutQuery = uri.split('?')[0];
+  const lastDotIndex = uriWithoutQuery.lastIndexOf('.');
+  const rawExtension = lastDotIndex > -1 ? uriWithoutQuery.substring(lastDotIndex + 1) : '';
+  const normalizedExtension = rawExtension.toLowerCase();
+  
+  // Validate against whitelist
+  if (ALLOWED_AUDIO_EXTENSIONS.includes(normalizedExtension)) {
+    return normalizedExtension;
+  }
+  
+  // Log fallback for debugging - m4a is the default format from expo-audio recorder
+  console.warn('[extractFileExtension] Unrecognized file extension, falling back to m4a. Original URI:', uri);
+  return 'm4a';
+}
+
 export default function NewRecordingScreen() {
   const router = useRouter();
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
@@ -174,7 +206,8 @@ export default function NewRecordingScreen() {
       const formData = new FormData();
       
       // React Native FormData requires the file object in a specific format
-      const fileExtension = audioUri.split('.').pop() || 'm4a';
+      const fileExtension = extractFileExtension(audioUri);
+      
       formData.append('audio', {
         uri: audioUri,
         type: `audio/${fileExtension}`,
@@ -188,7 +221,8 @@ export default function NewRecordingScreen() {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
-            // Don't set Content-Type - let the browser/RN set it with boundary
+            // Don't set Content-Type - FormData will automatically set it with the
+            // correct multipart/form-data boundary parameter
           },
           body: formData,
         }
