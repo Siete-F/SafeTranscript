@@ -127,19 +127,30 @@ export function registerProjectRoutes(app: App) {
         'Creating project'
       );
 
+      // Build insert values, only including defined fields to avoid Drizzle using 'default' keyword
+      const insertValues: any = {
+        userId: session.user.id,
+        name,
+        llmProvider,
+        llmModel,
+        llmPrompt,
+        enableAnonymization: enableAnonymization ?? true,
+      };
+
+      // Only add optional fields if they are defined
+      if (description !== undefined) {
+        insertValues.description = description;
+      }
+      if (customFields !== undefined) {
+        insertValues.customFields = customFields;
+      }
+      if (sensitiveWords !== undefined) {
+        insertValues.sensitiveWords = sensitiveWords;
+      }
+
       const [project] = await app.db
         .insert(schema.projects)
-        .values({
-          userId: session.user.id,
-          name,
-          description: description || null,
-          llmProvider,
-          llmModel,
-          llmPrompt,
-          enableAnonymization: enableAnonymization ?? true,
-          customFields: customFields || null,
-          sensitiveWords: sensitiveWords || null,
-        })
+        .values(insertValues)
         .returning();
 
       app.logger.info({ projectId: project.id }, 'Project created successfully');
