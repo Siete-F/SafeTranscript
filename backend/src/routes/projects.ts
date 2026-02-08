@@ -132,13 +132,13 @@ export function registerProjectRoutes(app: App) {
         .values({
           userId: session.user.id,
           name,
-          description,
+          description: description || null,
           llmProvider,
           llmModel,
           llmPrompt,
           enableAnonymization: enableAnonymization ?? true,
-          customFields,
-          sensitiveWords,
+          customFields: customFields || null,
+          sensitiveWords: sensitiveWords || null,
         })
         .returning();
 

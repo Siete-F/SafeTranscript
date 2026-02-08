@@ -54,9 +54,11 @@ export default function NewRecordingScreen() {
       setProject(data);
 
       const initialValues: Record<string, any> = {};
-      data.customFields.forEach((field) => {
-        initialValues[field.name] = '';
-      });
+      if (data.customFields && Array.isArray(data.customFields)) {
+        data.customFields.forEach((field) => {
+          initialValues[field.name] = '';
+        });
+      }
       setCustomFieldValues(initialValues);
     } catch (error) {
       console.error('[NewRecordingScreen] Error loading project:', error);
@@ -244,7 +246,7 @@ export default function NewRecordingScreen() {
       />
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {project && project.customFields.length > 0 && (
+        {project && project.customFields && Array.isArray(project.customFields) && project.customFields.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recording Details</Text>
             {project.customFields.map((field) => (

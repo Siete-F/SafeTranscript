@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Platform } from "react-native";
 import * as Linking from "expo-linking";
 import { authClient, setBearerToken, clearAuthTokens } from "@/lib/auth";
+import { getBearerToken } from "@/utils/api";
 
 interface User {
   id: string;
@@ -146,6 +147,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (Platform.OS === "web") {
         const token = await openOAuthPopup(provider);
         await setBearerToken(token);
+        // Verify token is retrievable before proceeding
+        const storedToken = await getBearerToken();
+        if (!storedToken) {
+          throw new Error("Failed to persist authentication token");
+        }
         await fetchUser();
       } else {
         // Native: Use expo-linking to generate a proper deep link

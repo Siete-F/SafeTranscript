@@ -67,13 +67,13 @@ export default function CreateProjectScreen() {
       console.log('[CreateProjectScreen] Creating project');
       const projectData = {
         name,
-        description,
+        description: description || undefined,
         llmProvider,
         llmModel,
         llmPrompt,
         enableAnonymization,
-        customFields,
-        sensitiveWords,
+        customFields: (customFields && customFields.length > 0) ? customFields : undefined,
+        sensitiveWords: (sensitiveWords && sensitiveWords.length > 0) ? sensitiveWords : undefined,
       };
       
       await authenticatedPost('/api/projects', projectData);
