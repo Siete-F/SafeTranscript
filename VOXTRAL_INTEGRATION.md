@@ -13,11 +13,17 @@ The backend transcription service (`backend/src/services/transcription.ts`) has 
 - Support Dutch and English language detection
 - Return timestamps and speaker information
 - Use the `MISTRAL_API_KEY` environment variable
+- **Accept transcription keywords** (formerly called "sensitive words") to improve transcription accuracy for domain-specific terms, proper nouns, and technical terminology
 
 ### Frontend Changes
 Updated the Settings screen to clarify that the Mistral API key is used for:
 - **Voxtral Transcribe 2** audio transcription
 - LLM processing (when Mistral is selected as the LLM provider)
+
+Updated the Project Creation screen:
+- Renamed "Sensitive Words" to "Transcription Keywords"
+- Clarified that these keywords help the transcription model recognize domain-specific terms
+- **Note**: These keywords are NOT used for PII masking - they improve transcription accuracy
 
 ## How to Use
 
@@ -55,6 +61,7 @@ Updated the Settings screen to clarify that the Mistral API key is used for:
 - **Timestamps**: Returns word-level or segment-level timestamps
 - **Speaker Detection**: Identifies different speakers in the audio
 - **Audio Formats**: Supports WAV, M4A, MP3
+- **Transcription Keywords**: Accepts a vocabulary list of domain-specific terms to improve transcription accuracy
 
 ### API Integration
 The backend now:
