@@ -18,8 +18,10 @@ export interface TranscriptionResult {
  * Process audio transcription using Mistral Voxtral Transcribe 2 API
  * Returns structured transcription with speaker detection and timestamps
  * Supports batch processing for WAV, M4A, MP3 formats
+ * @param audioBuffer The audio file buffer to transcribe
+ * @param sensitiveWords Optional array of keywords/terms for improved transcription accuracy (e.g., proper nouns, technical terms)
  */
-export async function processTranscription(audioBuffer: Buffer): Promise<TranscriptionResult> {
+export async function processTranscription(audioBuffer: Buffer, sensitiveWords?: string[]): Promise<TranscriptionResult> {
   try {
     const mistralApiKey = process.env.MISTRAL_API_KEY;
 
@@ -54,7 +56,8 @@ export async function processTranscription(audioBuffer: Buffer): Promise<Transcr
         client,
         response.id || '',
         audioBase64,
-        tempFile
+        tempFile,
+        sensitiveWords
       );
 
       // Parse the response and create segments
@@ -81,12 +84,18 @@ export async function processTranscription(audioBuffer: Buffer): Promise<Transcr
 
 /**
  * Call Voxtral Transcribe 2 API using Mistral client
+ * @param client Mistral client instance
+ * @param fileId Uploaded file ID (may not be used depending on API version)
+ * @param audioBase64 Base64 encoded audio data
+ * @param tempFile Path to temporary audio file
+ * @param sensitiveWords Optional keywords for improved transcription accuracy
  */
 async function callVoxtralTranscribe(
   client: Mistral,
   fileId: string,
   audioBase64: string,
-  tempFile: string
+  tempFile: string,
+  sensitiveWords?: string[]
 ): Promise<any> {
   try {
     // Use the Mistral API for transcription with Voxtral model
@@ -101,6 +110,12 @@ async function callVoxtralTranscribe(
     const audioBlob = new Blob([audioData], { type: 'audio/wav' });
     formData.append('file', audioBlob, 'audio.wav');
     formData.append('model', 'voxtral-transcribe-2');
+    
+    // Add sensitive words as vocabulary hints if provided
+    // This helps the model recognize domain-specific terms, proper nouns, etc.
+    if (sensitiveWords && sensitiveWords.length > 0) {
+      formData.append('vocabulary', JSON.stringify(sensitiveWords));
+    }
 
     // Make direct API call to Mistral Voxtral Transcribe endpoint
     const apiKey = process.env.MISTRAL_API_KEY || '';
@@ -186,10 +201,12 @@ function getFallbackTranscription(): TranscriptionResult {
 /**
  * Advanced transcription with speaker diarization
  * Voxtral Transcribe 2 provides speaker detection capabilities
+ * @param audioBuffer The audio file buffer to transcribe
+ * @param sensitiveWords Optional keywords for improved transcription accuracy
  */
-export async function processTranscriptionWithDiarization(audioBuffer: Buffer): Promise<TranscriptionResult> {
+export async function processTranscriptionWithDiarization(audioBuffer: Buffer, sensitiveWords?: string[]): Promise<TranscriptionResult> {
   // Voxtral Transcribe 2 automatically handles speaker diarization
-  return processTranscription(audioBuffer);
+  return processTranscription(audioBuffer, sensitiveWords);
 }
 
 /**

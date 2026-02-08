@@ -267,7 +267,7 @@ export default function CreateProjectScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Sensitive Words</Text>
+            <Text style={styles.sectionTitle}>Transcription Keywords</Text>
             <TouchableOpacity
               style={styles.addButton}
               onPress={handleAddSensitiveWord}
@@ -283,12 +283,12 @@ export default function CreateProjectScreen() {
           </View>
 
           <Text style={styles.sectionDescription}>
-            Add words or phrases that should be masked during anonymization (in addition to automatic PII detection).
+            Add important words or phrases (e.g., proper nouns, technical terms, company names) that the transcription model should pay special attention to for improved accuracy.
           </Text>
 
           {sensitiveWords.length === 0 && (
             <Text style={styles.emptyText}>
-              No sensitive words added. These will be masked in addition to detected PII.
+              No keywords added. Add domain-specific terms to improve transcription accuracy.
             </Text>
           )}
 
@@ -296,7 +296,7 @@ export default function CreateProjectScreen() {
             <View key={index} style={styles.customFieldRow}>
               <TextInput
                 style={[styles.input, styles.customFieldInput]}
-                placeholder="Sensitive word or phrase"
+                placeholder="e.g., company name, technical term"
                 placeholderTextColor={colors.textSecondary}
                 value={word}
                 onChangeText={(text) => {

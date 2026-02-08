@@ -528,11 +528,19 @@ export function registerRecordingRoutes(app: App) {
 
         app.logger.info({ recordingId: id }, 'Starting transcription process');
 
+        // Get project for sensitive words
+        const project = await app.db.query.projects.findFirst({
+          where: eq(schema.projects.id, recording.projectId),
+        });
+
         // Get audio file from storage
         const audioBuffer = await app.storage.download(recording.audioUrl);
 
-        // Call transcription service
-        const transcriptionData = await processTranscription(audioBuffer);
+        // Call transcription service with sensitive words
+        const transcriptionData = await processTranscription(
+          audioBuffer,
+          project?.sensitiveWords
+        );
 
         app.logger.info({ recordingId: id }, 'Transcription completed');
 
@@ -616,8 +624,7 @@ export function registerRecordingRoutes(app: App) {
         }
 
         const { anonymized, mappings } = await anonymizeTranscription(
-          recording.transcription,
-          project.sensitiveWords || []
+          recording.transcription
         );
 
         app.logger.info({ recordingId: id }, 'Anonymization completed');
@@ -765,7 +772,7 @@ async function triggerProcessingPipeline(app: App, recordingId: string, project:
       .where(eq(schema.recordings.id, recordingId));
 
     const audioBuffer = await app.storage.download(recording.audioUrl);
-    const transcriptionData = await processTranscription(audioBuffer);
+    const transcriptionData = await processTranscription(audioBuffer, project.sensitiveWords);
 
     await app.db
       .update(schema.recordings)
@@ -783,8 +790,7 @@ async function triggerProcessingPipeline(app: App, recordingId: string, project:
         .where(eq(schema.recordings.id, recordingId));
 
       const { anonymized, mappings } = await anonymizeTranscription(
-        transcriptionData.fullText,
-        project.sensitiveWords || []
+        transcriptionData.fullText
       );
 
       await app.db

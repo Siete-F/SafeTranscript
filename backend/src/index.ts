@@ -1,4 +1,5 @@
 import { createApplication } from "@specific-dev/framework";
+import multipart from '@fastify/multipart';
 import * as appSchema from './db/schema.js';
 import * as authSchema from './db/auth-schema.js';
 import { registerProjectRoutes } from './routes/projects.js';
@@ -18,6 +19,13 @@ export type App = typeof app;
 // Enable authentication and storage
 app.withAuth();
 app.withStorage();
+
+// Register multipart plugin for file uploads
+await app.fastify.register(multipart, {
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB max file size
+  },
+});
 
 // Register route modules
 registerProjectRoutes(app);

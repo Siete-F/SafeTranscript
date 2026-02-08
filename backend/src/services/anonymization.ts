@@ -50,10 +50,9 @@ interface PiiMatch {
 /**
  * Detect and anonymize PII in text
  * @param text The text to anonymize
- * @param sensitiveWords Additional words to treat as PII (e.g., company names, person names)
  * @returns Anonymized text and mapping of placeholders to original values
  */
-export async function anonymizeTranscription(text: string, sensitiveWords: string[] = []): Promise<AnonymizationResult> {
+export async function anonymizeTranscription(text: string): Promise<AnonymizationResult> {
   const mappings: Record<string, string> = {};
   let anonymized = text;
 
@@ -70,7 +69,6 @@ export async function anonymizeTranscription(text: string, sensitiveWords: strin
     dateOfBirth: 1,
     ipAddress: 1,
     person: 1,
-    organization: 1,
   };
 
   // Find all PII matches
@@ -102,22 +100,6 @@ export async function anonymizeTranscription(text: string, sensitiveWords: strin
         placeholder: `<person ${counters.person}>`,
       });
       counters.person++;
-    }
-  }
-
-  // Check sensitive words provided by user
-  for (const word of sensitiveWords) {
-    const wordPattern = new RegExp(`\\b${escapeRegex(word)}\\b`, 'gi');
-    while ((match = wordPattern.exec(text)) !== null) {
-      const found = matches.find((m) => m.value.toLowerCase() === match[0].toLowerCase());
-      if (!found) {
-        matches.push({
-          type: 'organization',
-          value: match[0],
-          placeholder: `<organization ${counters.organization}>`,
-        });
-        counters.organization++;
-      }
     }
   }
 

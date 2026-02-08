@@ -101,20 +101,40 @@ export default function ProjectDetailScreen() {
     try {
       const csvData = await authenticatedGetText(`/api/projects/${id}/export-csv`);
       
-      // Save CSV to file system
-      const fileUri = `${FileSystem.documentDirectory}project_${id}_export.csv`;
-      await FileSystem.writeAsStringAsync(fileUri, csvData);
-      
-      // Share the file
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri);
-      } else {
+      if (Platform.OS === 'web') {
+        // Web platform: Create a blob and trigger download
+        const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `project_${id}_export.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
         setModal({
           visible: true,
           title: 'Export Complete',
-          message: `CSV saved to: ${fileUri}`,
+          message: 'CSV file has been downloaded',
           type: 'success',
         });
+      } else {
+        // Mobile platforms: Use FileSystem and Sharing
+        const fileUri = `${FileSystem.documentDirectory}project_${id}_export.csv`;
+        await FileSystem.writeAsStringAsync(fileUri, csvData);
+        
+        // Share the file
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri);
+        } else {
+          setModal({
+            visible: true,
+            title: 'Export Complete',
+            message: `CSV saved to: ${fileUri}`,
+            type: 'success',
+          });
+        }
       }
     } catch (error) {
       console.error('[ProjectDetailScreen] Error exporting CSV:', error);
