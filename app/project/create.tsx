@@ -115,6 +115,15 @@ export default function CreateProjectScreen() {
     setCustomFields(updated);
   };
 
+  const handleAddSensitiveWord = () => {
+    setSensitiveWords([...sensitiveWords, '']);
+  };
+
+  const handleRemoveSensitiveWord = (index: number) => {
+    const updated = sensitiveWords.filter((_, i) => i !== index);
+    setSensitiveWords(updated);
+  };
+
   const handleProviderChange = (provider: 'openai' | 'gemini' | 'mistral') => {
     setLlmProvider(provider);
     const firstModel = LLM_PROVIDERS[provider].models[0].id;
@@ -258,6 +267,62 @@ export default function CreateProjectScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Sensitive Words</Text>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleAddSensitiveWord}
+              activeOpacity={0.7}
+            >
+              <IconSymbol
+                ios_icon_name="plus"
+                android_material_icon_name="add"
+                size={20}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.sectionDescription}>
+            Add words or phrases that should be masked during anonymization (in addition to automatic PII detection).
+          </Text>
+
+          {sensitiveWords.length === 0 && (
+            <Text style={styles.emptyText}>
+              No sensitive words added. These will be masked in addition to detected PII.
+            </Text>
+          )}
+
+          {sensitiveWords.map((word, index) => (
+            <View key={index} style={styles.customFieldRow}>
+              <TextInput
+                style={[styles.input, styles.customFieldInput]}
+                placeholder="Sensitive word or phrase"
+                placeholderTextColor={colors.textSecondary}
+                value={word}
+                onChangeText={(text) => {
+                  const updated = [...sensitiveWords];
+                  updated[index] = text;
+                  setSensitiveWords(updated);
+                }}
+              />
+              <TouchableOpacity
+                style={styles.removeButton}
+                onPress={() => handleRemoveSensitiveWord(index)}
+                activeOpacity={0.7}
+              >
+                <IconSymbol
+                  ios_icon_name="trash"
+                  android_material_icon_name="delete"
+                  size={20}
+                  color={colors.error}
+                />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Custom Fields</Text>
             <TouchableOpacity
               style={styles.addButton}
@@ -352,6 +417,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 12,
+    lineHeight: 20,
   },
   fieldContainer: {
     marginBottom: 16,
