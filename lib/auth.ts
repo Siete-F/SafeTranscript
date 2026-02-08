@@ -41,6 +41,11 @@ export const authClient = createAuthClient({
 export async function setBearerToken(token: string) {
   if (Platform.OS === "web") {
     localStorage.setItem(BEARER_TOKEN_KEY, token);
+    // Verify token was persisted
+    const stored = localStorage.getItem(BEARER_TOKEN_KEY);
+    if (stored !== token) {
+      throw new Error("Failed to persist bearer token");
+    }
   } else {
     await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
   }

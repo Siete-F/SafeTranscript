@@ -72,8 +72,8 @@ export default function CreateProjectScreen() {
         llmModel,
         llmPrompt,
         enableAnonymization,
-        customFields: customFields.length > 0 ? customFields : undefined,
-        sensitiveWords: sensitiveWords.length > 0 ? sensitiveWords : undefined,
+        customFields: (customFields && customFields.length > 0) ? customFields : undefined,
+        sensitiveWords: (sensitiveWords && sensitiveWords.length > 0) ? sensitiveWords : undefined,
       };
       
       await authenticatedPost('/api/projects', projectData);
