@@ -12,29 +12,25 @@ import { relations } from 'drizzle-orm';
 import type { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
 // Projects table
-export const projects = pgTable(
-  'projects',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: text('user_id').notNull(),
-    name: text('name').notNull(),
-    description: text('description'),
-    llmProvider: text('llm_provider', {
-      enum: ['openai', 'gemini', 'mistral'],
-    }).notNull(),
-    llmModel: text('llm_model').notNull(),
-    llmPrompt: text('llm_prompt').notNull(),
-    enableAnonymization: boolean('enable_anonymization').default(true).notNull(),
-    customFields: jsonb('custom_fields').$type<Array<{ name: string; type: 'text' | 'number' | 'date' }>>(),
-    sensitiveWords: jsonb('sensitive_words').$type<string[]>(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [uniqueIndex('projects_user_id_idx').on(table.userId)]
-);
+export const projects = pgTable('projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  llmProvider: text('llm_provider', {
+    enum: ['openai', 'gemini', 'mistral'],
+  }).notNull(),
+  llmModel: text('llm_model').notNull(),
+  llmPrompt: text('llm_prompt').notNull(),
+  enableAnonymization: boolean('enable_anonymization').default(true).notNull(),
+  customFields: jsonb('custom_fields').$type<Array<{ name: string; type: 'text' | 'number' | 'date' }>>(),
+  sensitiveWords: jsonb('sensitive_words').$type<string[]>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
 
 // Recordings table
 export const recordings = pgTable('recordings', {
