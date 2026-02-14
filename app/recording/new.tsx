@@ -24,7 +24,6 @@ import { Project } from '@/types';
 import { authenticatedGet, authenticatedPost, BACKEND_URL } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
 import { getBearerToken } from '@/utils/api';
-import * as FileSystem from 'expo-file-system/legacy';
 
 /**
  * Allowed audio file extensions for recording uploads.

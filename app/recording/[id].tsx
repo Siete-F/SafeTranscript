@@ -182,6 +182,12 @@ export default function RecordingDetailScreen() {
   const duration = playerStatus?.duration || recording.audioDuration || 0;
   const currentTimeDisplay = formatTime(currentTime);
   const durationDisplay = formatTime(duration);
+  
+  // Check if recording needs attention (error or pending without audio)
+  const hasError = recording.status === 'error';
+  const missingAudio = recording.status === 'pending' && !recording.audioUrl;
+  const needsAttention = hasError || missingAudio;
+  const canRetry = hasError && recording.audioUrl; // Only allow retry for errors with audio
 
   return (
     <SafeAreaView style={commonStyles.container} edges={['top']}>
@@ -204,7 +210,7 @@ export default function RecordingDetailScreen() {
         </View>
 
         {/* Show error message if recording failed */}
-        {recording.status === 'error' && recording.errorMessage && (
+        {hasError && recording.errorMessage && (
           <View style={styles.errorCard}>
             <IconSymbol
               ios_icon_name="exclamationmark.triangle.fill"
@@ -219,12 +225,12 @@ export default function RecordingDetailScreen() {
           </View>
         )}
 
-        {/* Show retry button for failed recordings or pending recordings without audio */}
-        {(recording.status === 'error' || (recording.status === 'pending' && !recording.audioUrl)) && (
+        {/* Show retry button for failed recordings with audio */}
+        {canRetry && (
           <TouchableOpacity
             style={styles.retryButton}
             onPress={handleRetryTranscription}
-            disabled={retrying || !recording.audioUrl}
+            disabled={retrying}
             activeOpacity={0.7}
           >
             {retrying ? (
@@ -237,16 +243,14 @@ export default function RecordingDetailScreen() {
                   size={20}
                   color={colors.card}
                 />
-                <Text style={styles.retryButtonText}>
-                  {recording.audioUrl ? 'Retry Processing' : 'Upload Audio Required'}
-                </Text>
+                <Text style={styles.retryButtonText}>Retry Processing</Text>
               </>
             )}
           </TouchableOpacity>
         )}
 
         {/* Show warning for pending recordings without audio */}
-        {recording.status === 'pending' && !recording.audioUrl && (
+        {missingAudio && (
           <View style={styles.warningCard}>
             <IconSymbol
               ios_icon_name="exclamationmark.circle.fill"
