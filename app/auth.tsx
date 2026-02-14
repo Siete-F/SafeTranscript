@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import {
   View,
@@ -10,76 +11,49 @@ import {
   KeyboardAvoidingView,
   ScrollView,
 } from "react-native";
-import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
+import { useAuth } from "@/contexts/AuthContext";
 import { Modal } from "@/components/ui/Modal";
 
 type Mode = "signin" | "signup";
 
 export default function AuthScreen() {
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGitHub, loading: authLoading } =
-    useAuth();
-
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [modal, setModal] = useState<{
-    visible: boolean;
-    title: string;
-    message: string;
-    type: 'success' | 'error' | 'info';
-  }>({
+  const [errorModal, setErrorModal] = useState<{ visible: boolean; message: string }>({
     visible: false,
-    title: '',
-    message: '',
-    type: 'info',
+    message: "",
   });
-
-  if (authLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
-  }
 
   const handleEmailAuth = async () => {
     if (!email || !password) {
-      setModal({
+      setErrorModal({
         visible: true,
-        title: 'Error',
-        message: 'Please enter email and password',
-        type: 'error',
+        message: "Please enter both email and password",
       });
       return;
     }
 
+    console.log("[AuthScreen] Starting email auth:", mode);
     setLoading(true);
     try {
       if (mode === "signin") {
         await signInWithEmail(email, password);
-        router.replace("/");
       } else {
         await signUpWithEmail(email, password, name);
-        setModal({
-          visible: true,
-          title: 'Success',
-          message: 'Account created successfully!',
-          type: 'success',
-        });
-        setTimeout(() => {
-          router.replace("/");
-        }, 1500);
       }
+      console.log("[AuthScreen] Email auth successful");
+      // Navigation is handled by _layout.tsx
     } catch (error: any) {
-      setModal({
+      console.error("[AuthScreen] Email auth failed:", error);
+      setErrorModal({
         visible: true,
-        title: 'Error',
-        message: error.message || 'Authentication failed',
-        type: 'error',
+        message: error?.message || `Failed to ${mode === "signin" ? "sign in" : "sign up"}`,
       });
     } finally {
       setLoading(false);
@@ -87,101 +61,101 @@ export default function AuthScreen() {
   };
 
   const handleSocialAuth = async (provider: "google" | "apple" | "github") => {
+    console.log(`[AuthScreen] Starting ${provider} auth`);
     setLoading(true);
     try {
       if (provider === "google") {
         await signInWithGoogle();
       } else if (provider === "apple") {
         await signInWithApple();
-      } else if (provider === "github") {
-        await signInWithGitHub();
       }
-      router.replace("/");
+      console.log(`[AuthScreen] ${provider} auth successful`);
+      // Navigation is handled by _layout.tsx
     } catch (error: any) {
-      setModal({
+      console.error(`[AuthScreen] ${provider} auth failed:`, error);
+      setErrorModal({
         visible: true,
-        title: 'Error',
-        message: error.message || 'Authentication failed',
-        type: 'error',
+        message: error?.message || `Failed to sign in with ${provider}`,
       });
     } finally {
       setLoading(false);
     }
   };
 
+  const modeText = mode === "signin" ? "Sign In" : "Sign Up";
+  const switchModeText = mode === "signin" ? "Don't have an account? Sign Up" : "Already have an account? Sign In";
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.content}>
-          <Text style={styles.title}>
-            {mode === "signin" ? "Sign In" : "Sign Up"}
+          <Text style={styles.title}>Secure Scribe</Text>
+          <Text style={styles.subtitle}>
+            {mode === "signin" ? "Welcome back" : "Create your account"}
           </Text>
 
           {mode === "signup" && (
             <TextInput
               style={styles.input}
-              placeholder="Name (optional)"
+              placeholder="Name"
+              placeholderTextColor="#999"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
+              editable={!loading}
             />
           )}
 
           <TextInput
             style={styles.input}
             placeholder="Email"
+            placeholderTextColor="#999"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            editable={!loading}
           />
 
           <TextInput
             style={styles.input}
             placeholder="Password"
+            placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
+            autoCorrect={false}
+            editable={!loading}
           />
 
           <TouchableOpacity
-            style={[styles.primaryButton, loading && styles.buttonDisabled]}
+            style={[styles.button, styles.primaryButton]}
             onPress={handleEmailAuth}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryButtonText}>
-                {mode === "signin" ? "Sign In" : "Sign Up"}
-              </Text>
+              <Text style={styles.buttonText}>{modeText}</Text>
             )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.switchModeButton}
-            onPress={() => setMode(mode === "signin" ? "signup" : "signin")}
-          >
-            <Text style={styles.switchModeText}>
-              {mode === "signin"
-                ? "Don't have an account? Sign Up"
-                : "Already have an account? Sign In"}
-            </Text>
           </TouchableOpacity>
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or continue with</Text>
+            <Text style={styles.dividerText}>OR</Text>
             <View style={styles.dividerLine} />
           </View>
 
           <TouchableOpacity
-            style={styles.socialButton}
+            style={[styles.button, styles.socialButton]}
             onPress={() => handleSocialAuth("google")}
             disabled={loading}
           >
@@ -190,24 +164,30 @@ export default function AuthScreen() {
 
           {Platform.OS === "ios" && (
             <TouchableOpacity
-              style={[styles.socialButton, styles.appleButton]}
+              style={[styles.button, styles.socialButton]}
               onPress={() => handleSocialAuth("apple")}
               disabled={loading}
             >
-              <Text style={[styles.socialButtonText, styles.appleButtonText]}>
-                Continue with Apple
-              </Text>
+              <Text style={styles.socialButtonText}>Continue with Apple</Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            onPress={() => setMode(mode === "signin" ? "signup" : "signin")}
+            disabled={loading}
+            style={styles.switchButton}
+          >
+            <Text style={styles.switchButtonText}>{switchModeText}</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
       <Modal
-        visible={modal.visible}
-        title={modal.title}
-        message={modal.message}
-        type={modal.type}
-        onClose={() => setModal({ ...modal, visible: false })}
+        visible={errorModal.visible}
+        title="Authentication Error"
+        message={errorModal.message}
+        type="error"
+        onClose={() => setErrorModal({ visible: false, message: "" })}
       />
     </KeyboardAvoidingView>
   );
@@ -218,60 +198,49 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
   scrollContent: {
     flexGrow: 1,
   },
   content: {
     flex: 1,
-    padding: 24,
     justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   title: {
     fontSize: 32,
     fontWeight: "bold",
+    color: "#000",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666",
     marginBottom: 32,
     textAlign: "center",
-    color: "#000",
   },
   input: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 12,
+    padding: 16,
     fontSize: 16,
-    backgroundColor: "#fff",
+    marginBottom: 16,
+    color: "#000",
+  },
+  button: {
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 12,
   },
   primaryButton: {
-    height: 50,
     backgroundColor: "#007AFF",
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 8,
   },
-  primaryButtonText: {
+  buttonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  switchModeButton: {
-    marginTop: 16,
-    alignItems: "center",
-  },
-  switchModeText: {
-    color: "#007AFF",
-    fontSize: 14,
   },
   divider: {
     flexDirection: "row",
@@ -281,33 +250,29 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#ddd",
+    backgroundColor: "#e0e0e0",
   },
   dividerText: {
-    marginHorizontal: 12,
-    color: "#666",
+    marginHorizontal: 16,
+    color: "#999",
     fontSize: 14,
   },
   socialButton: {
-    height: 50,
+    backgroundColor: "#f5f5f5",
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
-    backgroundColor: "#fff",
+    borderColor: "#e0e0e0",
   },
   socialButtonText: {
-    fontSize: 16,
     color: "#000",
-    fontWeight: "500",
+    fontSize: 16,
+    fontWeight: "600",
   },
-  appleButton: {
-    backgroundColor: "#000",
-    borderColor: "#000",
+  switchButton: {
+    marginTop: 24,
+    alignItems: "center",
   },
-  appleButtonText: {
-    color: "#fff",
+  switchButtonText: {
+    color: "#007AFF",
+    fontSize: 14,
   },
 });

@@ -1,3 +1,4 @@
+
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
@@ -26,12 +27,19 @@ export const isBackendConfigured = (): boolean => {
 export const getBearerToken = async (): Promise<string | null> => {
   try {
     if (Platform.OS === "web") {
-      return localStorage.getItem(BEARER_TOKEN_KEY);
+      const token = localStorage.getItem(BEARER_TOKEN_KEY);
+      console.log("[API] Retrieved token from localStorage:", token ? "exists" : "null");
+      return token;
     } else {
-      return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+      const token = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+      console.log("[API] Retrieved token from SecureStore:", token ? "exists" : "null");
+      return token;
     }
-  } catch (error) {
-    console.error("[API] Error retrieving bearer token:", error);
+  } catch (error: any) {
+    console.error("[API] Error retrieving bearer token:", {
+      message: error?.message || "Unknown error",
+      error: error,
+    });
     return null;
   }
 };
@@ -51,7 +59,9 @@ export const apiCall = async <T = any>(
   responseType: 'json' | 'text' = 'json'
 ): Promise<T> => {
   if (!isBackendConfigured()) {
-    throw new Error("Backend URL not configured. Please rebuild the app.");
+    const error = new Error("Backend URL not configured. Please rebuild the app.");
+    console.error("[API] Backend not configured");
+    throw error;
   }
 
   const url = `${BACKEND_URL}${endpoint}`;
@@ -66,34 +76,47 @@ export const apiCall = async <T = any>(
       },
     };
 
-    console.log("[API] Fetch options:", fetchOptions);
-
     // Always send the token if we have it (needed for cross-domain/iframe support)
     const token = await getBearerToken();
     if (token) {
+      console.log("[API] Adding Authorization header");
       fetchOptions.headers = {
         ...fetchOptions.headers,
         Authorization: `Bearer ${token}`,
       };
+    } else {
+      console.log("[API] No token available");
     }
+
+    console.log("[API] Request headers:", fetchOptions.headers);
 
     const response = await fetch(url, fetchOptions);
 
+    console.log("[API] Response status:", response.status, response.statusText);
+
     if (!response.ok) {
       const text = await response.text();
-      console.error("[API] Error response:", response.status, text);
-      throw new Error(`API error: ${response.status} - ${text}`);
+      console.error("[API] Error response:", {
+        status: response.status,
+        statusText: response.statusText,
+        body: text,
+      });
+      throw new Error(`API error: ${response.status} - ${text || response.statusText}`);
     }
 
     const data = responseType === 'text' ? await response.text() : await response.json();
     if (responseType === 'text') {
       console.log("[API] Success: Text response received, length:", (data as string).length);
     } else {
-      console.log("[API] Success:", data);
+      console.log("[API] Success: JSON response received");
     }
     return data as T;
-  } catch (error) {
-    console.error("[API] Request failed:", error);
+  } catch (error: any) {
+    console.error("[API] Request failed:", {
+      message: error?.message || "Unknown error",
+      error: error,
+      stack: error?.stack,
+    });
     throw error;
   }
 };
@@ -170,11 +193,16 @@ export const authenticatedApiCall = async <T = any>(
   options?: RequestInit,
   responseType: 'json' | 'text' = 'json'
 ): Promise<T> => {
+  console.log("[API] Authenticated call to:", endpoint);
   const token = await getBearerToken();
 
   if (!token) {
-    throw new Error("Authentication token not found. Please sign in.");
+    const error = new Error("Authentication token not found. Please sign in.");
+    console.error("[API] No authentication token found");
+    throw error;
   }
+
+  console.log("[API] Token found, proceeding with authenticated request");
 
   return apiCall<T>(endpoint, {
     ...options,
