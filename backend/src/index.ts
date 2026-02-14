@@ -2,7 +2,6 @@ import { createApplication } from "@specific-dev/framework";
 import type { FastifyError } from 'fastify';
 import * as appSchema from './db/schema.js';
 import * as authSchema from './db/auth-schema.js';
-import { registerAuthRoutes } from './routes/auth.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerRecordingRoutes } from './routes/recordings.js';
 import { registerApiKeyRoutes } from './routes/api-keys.js';
@@ -17,18 +16,35 @@ export const app = await createApplication(schema);
 // Export App type for use in route files
 export type App = typeof app;
 
+// Log that app is initialized
+console.log('Application instance created');
+
 // Enable authentication with OAuth providers
 // The framework handles OAuth proxying for Google, GitHub, and Apple automatically
 // No need to configure credentials - just enable the providers
+// IMPORTANT: Better Auth registers its own routes at /api/auth/*
+// Do NOT register custom routes that conflict with Better Auth paths
 app.withAuth();
+console.log('Better Auth enabled');
 
 // Enable storage for file uploads
 // Note: app.withStorage() automatically registers the multipart plugin with limits
 app.withStorage();
+console.log('Storage enabled');
 
-// Error handler for auth-related errors
+// Error handler for general application errors
+// Note: This should not interfere with Better Auth's error handling
 app.fastify.setErrorHandler(async (error: FastifyError, request, reply) => {
-  app.logger.error({ err: error, path: request.url, method: request.method }, 'Request error');
+  app.logger.error(
+    {
+      err: error,
+      path: request.url,
+      method: request.method,
+      statusCode: error.statusCode,
+      message: error.message
+    },
+    'Request error'
+  );
 
   // Handle authentication errors
   if (error.statusCode === 401) {
@@ -62,12 +78,14 @@ app.fastify.setErrorHandler(async (error: FastifyError, request, reply) => {
   });
 });
 
-// Register route modules
-registerAuthRoutes(app);
+// Register custom route modules
+// IMPORTANT: These should NOT conflict with /api/auth/* paths (Better Auth reserves these)
 registerProjectRoutes(app);
 registerRecordingRoutes(app);
 registerApiKeyRoutes(app);
 registerExportRoutes(app);
 
+console.log('Custom routes registered');
+
 await app.run();
-app.logger.info('Application started successfully');
+app.logger.info('Application started successfully - Better Auth endpoints available at /api/auth/*');

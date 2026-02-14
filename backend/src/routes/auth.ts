@@ -8,13 +8,14 @@ import {
   sanitizeUser,
 } from '../services/auth-helper.js';
 
-export function registerAuthRoutes(app: App) {
+export function registerAuthStatusRoutes(app: App) {
   const requireAuth = app.requireAuth();
   const fastify = app.fastify;
 
-  // GET /api/auth/status - Get current session status
+  // GET /api/auth-status/session - Get current session status
+  // Note: Uses /api/auth-status instead of /api/auth to avoid conflicts with Better Auth
   fastify.get(
-    '/api/auth/status',
+    '/api/auth-status/session',
     {
       schema: {
         description: 'Get current authentication status',
@@ -65,9 +66,9 @@ export function registerAuthRoutes(app: App) {
     }
   );
 
-  // GET /api/auth/user - Get current user (requires auth)
+  // GET /api/auth-status/user - Get current user (requires auth)
   fastify.get(
-    '/api/auth/user',
+    '/api/auth-status/user',
     {
       schema: {
         description: 'Get current authenticated user',
@@ -112,9 +113,9 @@ export function registerAuthRoutes(app: App) {
     }
   );
 
-  // POST /api/auth/logout - Sign out current user
+  // POST /api/auth-status/logout - Sign out current user
   fastify.post(
-    '/api/auth/logout',
+    '/api/auth-status/logout',
     {
       schema: {
         description: 'Sign out current user',
@@ -155,9 +156,9 @@ export function registerAuthRoutes(app: App) {
     }
   );
 
-  // GET /api/auth/providers - Get available OAuth providers
+  // GET /api/auth-status/providers - Get available OAuth providers
   fastify.get(
-    '/api/auth/providers',
+    '/api/auth-status/providers',
     {
       schema: {
         description: 'Get list of available OAuth providers',
