@@ -22,12 +22,12 @@ export default function CreateProjectScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [llmProvider, setLlmProvider] = useState<'openai' | 'gemini' | 'mistral'>('openai');
-  const [llmModel, setLlmModel] = useState('gpt-4');
+  const [llmProvider, setLlmProvider] = useState<'openai' | 'gemini' | 'mistral'>('gemini');
+  const [llmModel, setLlmModel] = useState('gemini-1.5-flash');
   const [llmPrompt, setLlmPrompt] = useState('Summarize the key points and action items from this recording.');
   const [enableAnonymization, setEnableAnonymization] = useState(true);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
-  const [sensitiveWords, setSensitiveWords] = useState<string[]>([]);
+  const [sensitiveWordsText, setSensitiveWordsText] = useState('');
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState<{
     visible: boolean;
@@ -65,6 +65,10 @@ export default function CreateProjectScreen() {
     setLoading(true);
     try {
       console.log('[CreateProjectScreen] Creating project');
+      const parsedSensitiveWords = sensitiveWordsText
+        .split(',')
+        .map((w) => w.trim())
+        .filter((w) => w.length > 0);
       const projectData = {
         name,
         description: description || undefined,
@@ -73,7 +77,7 @@ export default function CreateProjectScreen() {
         llmPrompt,
         enableAnonymization,
         customFields: (customFields && customFields.length > 0) ? customFields : undefined,
-        sensitiveWords: (sensitiveWords && sensitiveWords.length > 0) ? sensitiveWords : undefined,
+        sensitiveWords: parsedSensitiveWords.length > 0 ? parsedSensitiveWords : undefined,
       };
       
       await authenticatedPost('/api/projects', projectData);
@@ -113,15 +117,6 @@ export default function CreateProjectScreen() {
   const handleRemoveCustomField = (index: number) => {
     const updated = customFields.filter((_, i) => i !== index);
     setCustomFields(updated);
-  };
-
-  const handleAddSensitiveWord = () => {
-    setSensitiveWords([...sensitiveWords, '']);
-  };
-
-  const handleRemoveSensitiveWord = (index: number) => {
-    const updated = sensitiveWords.filter((_, i) => i !== index);
-    setSensitiveWords(updated);
   };
 
   const handleProviderChange = (provider: 'openai' | 'gemini' | 'mistral') => {
@@ -266,59 +261,21 @@ export default function CreateProjectScreen() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Transcription Keywords</Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={handleAddSensitiveWord}
-              activeOpacity={0.7}
-            >
-              <IconSymbol
-                ios_icon_name="plus"
-                android_material_icon_name="add"
-                size={20}
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.sectionTitle}>Transcription Keywords</Text>
 
           <Text style={styles.sectionDescription}>
-            Add important words or phrases (e.g., proper nouns, technical terms, company names) that the transcription model should pay special attention to for improved accuracy.
+            Add important words or phrases (e.g., proper nouns, technical terms, company names) that the transcription model should pay special attention to for improved accuracy. Separate keywords with commas.
           </Text>
 
-          {sensitiveWords.length === 0 && (
-            <Text style={styles.emptyText}>
-              No keywords added. Add domain-specific terms to improve transcription accuracy.
-            </Text>
-          )}
-
-          {sensitiveWords.map((word, index) => (
-            <View key={index} style={styles.customFieldRow}>
-              <TextInput
-                style={[styles.input, styles.customFieldInput]}
-                placeholder="e.g., company name, technical term"
-                placeholderTextColor={colors.textSecondary}
-                value={word}
-                onChangeText={(text) => {
-                  const updated = [...sensitiveWords];
-                  updated[index] = text;
-                  setSensitiveWords(updated);
-                }}
-              />
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => handleRemoveSensitiveWord(index)}
-                activeOpacity={0.7}
-              >
-                <IconSymbol
-                  ios_icon_name="trash"
-                  android_material_icon_name="delete"
-                  size={20}
-                  color={colors.error}
-                />
-              </TouchableOpacity>
-            </View>
-          ))}
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="e.g., Acme Corp, TensorFlow, Dr. Smith"
+            placeholderTextColor={colors.textSecondary}
+            value={sensitiveWordsText}
+            onChangeText={setSensitiveWordsText}
+            multiline
+            numberOfLines={3}
+          />
         </View>
 
         <View style={styles.section}>

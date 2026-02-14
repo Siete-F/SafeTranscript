@@ -8,16 +8,19 @@ import {
   TouchableOpacity,
   RefreshControl,
   Platform,
+  Pressable,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors, commonStyles } from '@/styles/commonStyles';
 import { Project, Recording } from '@/types';
-import { authenticatedGet, authenticatedGetText } from '@/utils/api';
+import { authenticatedGet, authenticatedGetText, authenticatedDelete } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Reanimated, { SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 export default function ProjectDetailScreen() {
   const router = useRouter();
@@ -30,13 +33,14 @@ export default function ProjectDetailScreen() {
     visible: boolean;
     title: string;
     message: string;
-    type: 'success' | 'error' | 'info';
+    type: 'success' | 'error' | 'info' | 'confirm';
   }>({
     visible: false,
     title: '',
     message: '',
     type: 'info',
   });
+  const [recordingToDelete, setRecordingToDelete] = useState<Recording | null>(null);
 
   const loadProject = useCallback(async () => {
     try {
@@ -156,6 +160,42 @@ export default function ProjectDetailScreen() {
     }
   };
 
+  const handleDeleteRecording = (recording: Recording) => {
+    const customFieldEntries = recording.customFieldValues
+      ? Object.entries(recording.customFieldValues)
+          .filter(([, value]) => value !== null && value !== undefined && value !== '')
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\n')
+      : '';
+    const customFieldInfo = customFieldEntries
+      ? `\n\nCustom fields:\n${customFieldEntries}`
+      : '';
+    setRecordingToDelete(recording);
+    setModal({
+      visible: true,
+      title: 'Delete Recording',
+      message: `Are you sure you want to delete this recording?${customFieldInfo}`,
+      type: 'confirm',
+    });
+  };
+
+  const confirmDeleteRecording = async () => {
+    if (!recordingToDelete) return;
+    try {
+      await authenticatedDelete(`/api/recordings/${recordingToDelete.id}`);
+      setRecordings((prev) => prev.filter((r) => r.id !== recordingToDelete.id));
+      setRecordingToDelete(null);
+    } catch (error) {
+      console.error('[ProjectDetailScreen] Error deleting recording:', error);
+      setModal({
+        visible: true,
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to delete recording',
+        type: 'error',
+      });
+    }
+  };
+
   const getStatusColor = (status: Recording['status']) => {
     const statusColors = {
       pending: colors.statusPending,
@@ -188,6 +228,31 @@ export default function ProjectDetailScreen() {
     return `${minsText} ${secsText}`;
   };
 
+  const RightAction = ({
+    item,
+    drag,
+  }: {
+    item: Recording;
+    drag: SharedValue<number>;
+  }) => {
+    const styleAnimation = useAnimatedStyle(() => ({
+      transform: [{ translateX: drag.value + 80 }],
+    }));
+
+    return (
+      <Pressable onPress={() => handleDeleteRecording(item)}>
+        <Reanimated.View style={[styleAnimation, styles.swipeDeleteAction]}>
+          <IconSymbol
+            ios_icon_name="trash.fill"
+            android_material_icon_name="delete"
+            size={24}
+            color="#FFFFFF"
+          />
+        </Reanimated.View>
+      </Pressable>
+    );
+  };
+
   const renderRecording = ({ item }: { item: Recording }) => {
     const statusColor = getStatusColor(item.status);
     const statusLabel = getStatusLabel(item.status);
@@ -196,52 +261,62 @@ export default function ProjectDetailScreen() {
     const needsAttention = item.status === 'error' || (item.status === 'pending' && !item.audioUrl);
 
     return (
-      <TouchableOpacity
-        style={styles.recordingCard}
-        onPress={() => handleRecordingPress(item)}
-        activeOpacity={0.7}
+      <ReanimatedSwipeable
+        friction={2}
+        enableTrackpadTwoFingerGesture
+        rightThreshold={40}
+        renderRightActions={(_prog, drag) => (
+          <RightAction item={item} drag={drag} />
+        )}
+        overshootRight={false}
       >
-        <View style={styles.recordingHeader}>
-          <View style={styles.recordingHeaderLeft}>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-              <Text style={styles.statusText}>{statusLabel}</Text>
+        <TouchableOpacity
+          style={styles.recordingCard}
+          onPress={() => handleRecordingPress(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.recordingHeader}>
+            <View style={styles.recordingHeaderLeft}>
+              <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+                <Text style={styles.statusText}>{statusLabel}</Text>
+              </View>
+              {needsAttention && (
+                <IconSymbol
+                  ios_icon_name="exclamationmark.circle.fill"
+                  android_material_icon_name="error"
+                  size={20}
+                  color={colors.statusError}
+                />
+              )}
             </View>
-            {needsAttention && (
+            <Text style={styles.recordingDate}>{dateText}</Text>
+          </View>
+
+          <View style={styles.recordingMeta}>
+            <View style={styles.metaItem}>
               <IconSymbol
-                ios_icon_name="exclamationmark.circle.fill"
-                android_material_icon_name="error"
-                size={20}
-                color={colors.statusError}
+                ios_icon_name="clock.fill"
+                android_material_icon_name="access-time"
+                size={16}
+                color={colors.textSecondary}
               />
-            )}
+              <Text style={styles.metaText}>{durationText}</Text>
+            </View>
           </View>
-          <Text style={styles.recordingDate}>{dateText}</Text>
-        </View>
 
-        <View style={styles.recordingMeta}>
-          <View style={styles.metaItem}>
-            <IconSymbol
-              ios_icon_name="clock.fill"
-              android_material_icon_name="access-time"
-              size={16}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.metaText}>{durationText}</Text>
-          </View>
-        </View>
-
-        {item.llmOutput && (
-          <Text style={styles.recordingPreview} numberOfLines={2}>
-            {item.llmOutput}
-          </Text>
-        )}
-        
-        {needsAttention && !item.audioUrl && (
-          <Text style={styles.recordingWarning}>
-            Audio upload required
-          </Text>
-        )}
-      </TouchableOpacity>
+          {item.llmOutput && (
+            <Text style={styles.recordingPreview} numberOfLines={2}>
+              {item.llmOutput}
+            </Text>
+          )}
+          
+          {needsAttention && !item.audioUrl && (
+            <Text style={styles.recordingWarning}>
+              Audio upload required
+            </Text>
+          )}
+        </TouchableOpacity>
+      </ReanimatedSwipeable>
     );
   };
 
@@ -324,7 +399,12 @@ export default function ProjectDetailScreen() {
         title={modal.title}
         message={modal.message}
         type={modal.type}
-        onClose={() => setModal({ ...modal, visible: false })}
+        onClose={() => {
+          setModal({ ...modal, visible: false });
+          setRecordingToDelete(null);
+        }}
+        onConfirm={modal.type === 'confirm' ? confirmDeleteRecording : undefined}
+        confirmText={modal.type === 'confirm' ? 'Delete' : 'OK'}
       />
     </SafeAreaView>
   );
@@ -446,5 +526,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  swipeDeleteAction: {
+    width: 80,
+    height: '100%',
+    backgroundColor: colors.statusError,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
   },
 });
