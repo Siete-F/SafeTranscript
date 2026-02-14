@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { eq, and, count } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import type { NewProject } from '../db/schema.js';
 import type { App } from '../index.js';
 
 export function registerProjectRoutes(app: App) {
@@ -127,26 +128,18 @@ export function registerProjectRoutes(app: App) {
         'Creating project'
       );
 
-      // Build insert values, only including defined fields to avoid Drizzle using 'default' keyword
-      const insertValues: Partial<NewProject> = {
+      // Build insert values with all required fields
+      const insertValues = {
         userId: session.user.id,
         name,
+        description: description ?? null,
         llmProvider,
         llmModel,
         llmPrompt,
         enableAnonymization: enableAnonymization ?? true,
+        customFields: customFields ?? null,
+        sensitiveWords: sensitiveWords ?? null,
       };
-
-      // Only add optional fields if they are defined
-      if (description !== undefined) {
-        insertValues.description = description;
-      }
-      if (customFields !== undefined) {
-        insertValues.customFields = customFields;
-      }
-      if (sensitiveWords !== undefined) {
-        insertValues.sensitiveWords = sensitiveWords;
-      }
 
       const [project] = await app.db
         .insert(schema.projects)
