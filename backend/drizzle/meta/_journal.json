@@ -8,6 +8,13 @@
       "when": 1770498061665,
       "tag": "20260207210101_wandering_shotgun",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771100024127,
+      "tag": "20260214201344_drop_projects_unique_index",
+      "breakpoints": true
     }
   ]
 }
