@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +16,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors, commonStyles } from '@/styles/commonStyles';
 import { Recording } from '@/types';
 import * as Clipboard from 'expo-clipboard';
-import { authenticatedGet } from '@/utils/api';
+import { authenticatedGet, authenticatedPost } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
 
 export default function RecordingDetailScreen() {
@@ -23,6 +24,7 @@ export default function RecordingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [recording, setRecording] = useState<Recording | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retrying, setRetrying] = useState(false);
   const [modal, setModal] = useState<{
     visible: boolean;
     title: string;
@@ -90,6 +92,40 @@ export default function RecordingDetailScreen() {
     });
   };
 
+  const handleRetryTranscription = async () => {
+    if (!recording) {
+      return;
+    }
+
+    setRetrying(true);
+    try {
+      console.log('[RecordingDetailScreen] User triggered retry transcription');
+      await authenticatedPost(`/api/recordings/${recording.id}/transcribe`, {});
+      
+      setModal({
+        visible: true,
+        title: 'Processing',
+        message: 'Transcription started. Refresh to see updates.',
+        type: 'success',
+      });
+      
+      // Reload the recording after a short delay
+      setTimeout(() => {
+        loadRecording();
+      }, 2000);
+    } catch (error) {
+      console.error('[RecordingDetailScreen] Error retrying transcription:', error);
+      setModal({
+        visible: true,
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to retry transcription',
+        type: 'error',
+      });
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   const getStatusColor = (status: Recording['status']) => {
     const statusColors = {
       pending: colors.statusPending,
@@ -146,6 +182,12 @@ export default function RecordingDetailScreen() {
   const duration = playerStatus?.duration || recording.audioDuration || 0;
   const currentTimeDisplay = formatTime(currentTime);
   const durationDisplay = formatTime(duration);
+  
+  // Check if recording needs attention (error or pending without audio)
+  const hasError = recording.status === 'error';
+  const missingAudio = recording.status === 'pending' && !recording.audioUrl;
+  const needsAttention = hasError || missingAudio;
+  const canRetry = hasError && recording.audioUrl; // Only allow retry for errors with audio
 
   return (
     <SafeAreaView style={commonStyles.container} edges={['top']}>
@@ -166,6 +208,65 @@ export default function RecordingDetailScreen() {
             {new Date(recording.createdAt).toLocaleString()}
           </Text>
         </View>
+
+        {/* Show error message if recording failed */}
+        {hasError && recording.errorMessage && (
+          <View style={styles.errorCard}>
+            <IconSymbol
+              ios_icon_name="exclamationmark.triangle.fill"
+              android_material_icon_name="error"
+              size={24}
+              color={colors.statusError}
+            />
+            <View style={styles.errorContent}>
+              <Text style={styles.errorTitle}>Processing Error</Text>
+              <Text style={styles.errorMessage}>{recording.errorMessage}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Show retry button for failed recordings with audio */}
+        {canRetry && (
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={handleRetryTranscription}
+            disabled={retrying}
+            activeOpacity={0.7}
+          >
+            {retrying ? (
+              <ActivityIndicator color={colors.card} />
+            ) : (
+              <>
+                <IconSymbol
+                  ios_icon_name="arrow.clockwise"
+                  android_material_icon_name="refresh"
+                  size={20}
+                  color={colors.card}
+                />
+                <Text style={styles.retryButtonText}>Retry Processing</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Show warning for pending recordings without audio */}
+        {missingAudio && (
+          <View style={styles.warningCard}>
+            <IconSymbol
+              ios_icon_name="exclamationmark.circle.fill"
+              android_material_icon_name="warning"
+              size={24}
+              color={colors.statusPending}
+            />
+            <View style={styles.warningContent}>
+              <Text style={styles.warningTitle}>Audio Not Uploaded</Text>
+              <Text style={styles.warningMessage}>
+                The recording was created but the audio file was not uploaded. 
+                Please record again to complete the upload.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {recording.audioUrl && (
           <View style={styles.playerCard}>
@@ -379,5 +480,83 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     flex: 1,
+  },
+  errorCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.statusError,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  errorContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  errorTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.statusError,
+    marginBottom: 4,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  warningCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.statusPending,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  warningContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  warningTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.statusPending,
+    marginBottom: 4,
+  },
+  warningMessage: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.card,
   },
 });

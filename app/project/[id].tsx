@@ -193,6 +193,7 @@ export default function ProjectDetailScreen() {
     const statusLabel = getStatusLabel(item.status);
     const durationText = item.audioDuration ? formatDuration(item.audioDuration) : 'N/A';
     const dateText = new Date(item.createdAt).toLocaleDateString();
+    const needsAttention = item.status === 'error' || (item.status === 'pending' && !item.audioUrl);
 
     return (
       <TouchableOpacity
@@ -201,8 +202,18 @@ export default function ProjectDetailScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.recordingHeader}>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusText}>{statusLabel}</Text>
+          <View style={styles.recordingHeaderLeft}>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+              <Text style={styles.statusText}>{statusLabel}</Text>
+            </View>
+            {needsAttention && (
+              <IconSymbol
+                ios_icon_name="exclamationmark.circle.fill"
+                android_material_icon_name="error"
+                size={20}
+                color={colors.statusError}
+              />
+            )}
           </View>
           <Text style={styles.recordingDate}>{dateText}</Text>
         </View>
@@ -222,6 +233,12 @@ export default function ProjectDetailScreen() {
         {item.llmOutput && (
           <Text style={styles.recordingPreview} numberOfLines={2}>
             {item.llmOutput}
+          </Text>
+        )}
+        
+        {needsAttention && !item.audioUrl && (
+          <Text style={styles.recordingWarning}>
+            Audio upload required
           </Text>
         )}
       </TouchableOpacity>
@@ -366,6 +383,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  recordingHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   statusBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -398,6 +420,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     lineHeight: 20,
+  },
+  recordingWarning: {
+    fontSize: 13,
+    color: colors.statusError,
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   emptyContainer: {
     flex: 1,

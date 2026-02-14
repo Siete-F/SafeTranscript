@@ -71,6 +71,7 @@ export function registerRecordingRoutes(app: App) {
         .select({
           id: schema.recordings.id,
           status: schema.recordings.status,
+          audioUrl: schema.recordings.audioUrl,
           audioDuration: schema.recordings.audioDuration,
           customFieldValues: schema.recordings.customFieldValues,
           createdAt: schema.recordings.createdAt,

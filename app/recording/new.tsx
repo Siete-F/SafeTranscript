@@ -192,31 +192,48 @@ export default function NewRecordingScreen() {
     }
 
     setIsUploading(true);
+    let recordingId: string | null = null;
+    
     try {
       console.log('[NewRecordingScreen] Creating recording record');
       const createResponse = await authenticatedPost<{ id: string; uploadUrl?: string }>(
         `/api/projects/${projectId}/recordings`,
         { customFieldValues }
       );
+      recordingId = createResponse.id;
 
-      console.log('[NewRecordingScreen] Uploading audio file to recording:', createResponse.id);
+      console.log('[NewRecordingScreen] Uploading audio file to recording:', recordingId);
       console.log('[NewRecordingScreen] Audio URI:', audioUri);
       
       // Upload audio file using multipart form data
       const formData = new FormData();
       
-      // React Native FormData requires the file object in a specific format
+      // Get file extension for proper MIME type
       const fileExtension = extractFileExtension(audioUri);
+      const mimeType = `audio/${fileExtension}`;
       
-      formData.append('audio', {
-        uri: audioUri,
-        type: `audio/${fileExtension}`,
-        name: `recording.${fileExtension}`,
-      } as any);
+      if (Platform.OS === 'web') {
+        // On web, we need to fetch the file and create a proper Blob
+        try {
+          const response = await fetch(audioUri);
+          const blob = await response.blob();
+          formData.append('audio', blob, `recording.${fileExtension}`);
+        } catch (fetchError) {
+          console.error('[NewRecordingScreen] Failed to fetch audio file on web:', fetchError);
+          throw new Error('Failed to read audio file');
+        }
+      } else {
+        // On native platforms (iOS/Android), React Native FormData handles file URIs
+        formData.append('audio', {
+          uri: audioUri,
+          type: mimeType,
+          name: `recording.${fileExtension}`,
+        } as any);
+      }
 
       const token = await getBearerToken();
       const uploadResponse = await fetch(
-        `${BACKEND_URL}/api/recordings/${createResponse.id}/upload-audio`,
+        `${BACKEND_URL}/api/recordings/${recordingId}/upload-audio`,
         {
           method: 'POST',
           headers: {
@@ -247,12 +264,26 @@ export default function NewRecordingScreen() {
       }, 1500);
     } catch (error) {
       console.error('[NewRecordingScreen] Error saving recording:', error);
+      
+      // If recording was created but upload failed, user can retry later
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save recording';
+      const userMessage = recordingId 
+        ? `${errorMessage}. The recording was saved but you'll need to retry uploading the audio.`
+        : errorMessage;
+      
       setModal({
         visible: true,
         title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to save recording',
+        message: userMessage,
         type: 'error',
       });
+      
+      // Still navigate back if recording was created, so user can see it and retry
+      if (recordingId) {
+        setTimeout(() => {
+          router.back();
+        }, 3000);
+      }
     } finally {
       setIsUploading(false);
     }
