@@ -102,7 +102,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("[AuthContext] Fetching user session...");
       
       const session = await authClient.getSession();
-      console.log("[AuthContext] Session response:", session);
+      console.log("[AuthContext] Session response:", JSON.stringify(session, null, 2));
+      
+      // Check for error in response
+      if (session?.error) {
+        console.error("[AuthContext] Session error:", {
+          status: session.error.status,
+          statusText: session.error.statusText,
+          message: session.error.message,
+        });
+        
+        // If it's a 500 error, the backend might not be ready
+        if (session.error.status === 500) {
+          console.error("[AuthContext] Backend returned 500 error - Better Auth may not be properly configured");
+        }
+        
+        setUser(null);
+        await clearAuthTokens();
+        return;
+      }
       
       if (session?.data?.user) {
         console.log("[AuthContext] User found:", session.data.user.email);
@@ -145,7 +163,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("[AuthContext] Signing in with email:", email);
       const result = await authClient.signIn.email({ email, password });
-      console.log("[AuthContext] Sign in result:", result);
+      console.log("[AuthContext] Sign in result:", JSON.stringify(result, null, 2));
+      
+      // Check for error in response
+      if (result?.error) {
+        const errorMessage = result.error.message || 
+                           (result.error.status === 500 
+                             ? "Server error. The authentication service may not be properly configured." 
+                             : "Failed to sign in. Please check your credentials.");
+        console.error("[AuthContext] Sign in error:", {
+          status: result.error.status,
+          statusText: result.error.statusText,
+          message: errorMessage,
+        });
+        throw new Error(errorMessage);
+      }
+      
+      if (!result?.data) {
+        throw new Error("No response data from sign in");
+      }
+      
       await fetchUser();
     } catch (error: any) {
       console.error("[AuthContext] Email sign in failed:", {
@@ -164,7 +201,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         name,
       });
-      console.log("[AuthContext] Sign up result:", result);
+      console.log("[AuthContext] Sign up result:", JSON.stringify(result, null, 2));
+      
+      // Check for error in response
+      if (result?.error) {
+        const errorMessage = result.error.message || 
+                           (result.error.status === 500 
+                             ? "Server error. The authentication service may not be properly configured." 
+                             : "Failed to create account.");
+        console.error("[AuthContext] Sign up error:", {
+          status: result.error.status,
+          statusText: result.error.statusText,
+          message: errorMessage,
+        });
+        throw new Error(errorMessage);
+      }
+      
+      if (!result?.data) {
+        throw new Error("No response data from sign up");
+      }
+      
       await fetchUser();
     } catch (error: any) {
       console.error("[AuthContext] Email sign up failed:", {
@@ -199,10 +255,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const callbackURL = Linking.createURL("/");
         console.log(`[AuthContext] Native ${provider} sign in with callback:`, callbackURL);
         
-        await authClient.signIn.social({
+        const result = await authClient.signIn.social({
           provider,
           callbackURL,
         });
+        
+        console.log(`[AuthContext] ${provider} sign in result:`, JSON.stringify(result, null, 2));
+        
+        // Check for error in response
+        if (result?.error) {
+          const errorMessage = result.error.message || 
+                             (result.error.status === 500 
+                               ? "Server error. OAuth may not be properly configured." 
+                               : `Failed to sign in with ${provider}.`);
+          console.error(`[AuthContext] ${provider} sign in error:`, {
+            status: result.error.status,
+            statusText: result.error.statusText,
+            message: errorMessage,
+          });
+          throw new Error(errorMessage);
+        }
         
         // The redirect will reload the app or be handled by deep linking
         // fetchUser will be called on mount or via event listener

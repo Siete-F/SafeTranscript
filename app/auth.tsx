@@ -51,9 +51,22 @@ export default function AuthScreen() {
       // Navigation is handled by _layout.tsx
     } catch (error: any) {
       console.error("[AuthScreen] Email auth failed:", error);
+      
+      // Extract user-friendly error message
+      let errorMessage = error?.message || `Failed to ${mode === "signin" ? "sign in" : "sign up"}`;
+      
+      // Add helpful context for common errors
+      if (errorMessage.includes("Server error") || errorMessage.includes("500")) {
+        errorMessage = "The authentication service is currently unavailable. The backend may be restarting. Please try again in a moment.";
+      } else if (errorMessage.includes("credentials")) {
+        errorMessage = "Invalid email or password. Please check your credentials and try again.";
+      } else if (errorMessage.includes("already exists")) {
+        errorMessage = "An account with this email already exists. Please sign in instead.";
+      }
+      
       setErrorModal({
         visible: true,
-        message: error?.message || `Failed to ${mode === "signin" ? "sign in" : "sign up"}`,
+        message: errorMessage,
       });
     } finally {
       setLoading(false);
@@ -73,9 +86,22 @@ export default function AuthScreen() {
       // Navigation is handled by _layout.tsx
     } catch (error: any) {
       console.error(`[AuthScreen] ${provider} auth failed:`, error);
+      
+      // Extract user-friendly error message
+      let errorMessage = error?.message || `Failed to sign in with ${provider}`;
+      
+      // Add helpful context for common errors
+      if (errorMessage.includes("Server error") || errorMessage.includes("500")) {
+        errorMessage = `${provider} sign-in is currently unavailable. The backend may be restarting. Please try again in a moment.`;
+      } else if (errorMessage.includes("popup")) {
+        errorMessage = "Please allow popups to sign in with " + provider;
+      } else if (errorMessage.includes("cancelled")) {
+        errorMessage = "Sign-in was cancelled";
+      }
+      
       setErrorModal({
         visible: true,
-        message: error?.message || `Failed to sign in with ${provider}`,
+        message: errorMessage,
       });
     } finally {
       setLoading(false);
