@@ -1,6 +1,6 @@
-# Secure Scribe
+# Safe Transcript
 
-A privacy-focused audio transcription and analysis application. Secure Scribe records audio, transcribes it locally using **Mistral Voxtral Transcribe v2 Realtime**, anonymizes personally identifiable information (PII) using a local PII detection model, and then processes the cleaned transcript with a configurable LLM for structured output (e.g., summaries, action items).
+A privacy-focused audio transcription and analysis application. Safe Transcript records audio, transcribes it locally using **Mistral Voxtral Transcribe v2 Realtime**, anonymizes personally identifiable information (PII) using a local PII detection model, and then processes the cleaned transcript with a configurable LLM for structured output (e.g., summaries, action items).
 
 The end goal is a fully local pipeline: record → transcribe → anonymize → analyze — keeping sensitive data on-device throughout.
 
