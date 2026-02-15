@@ -16,7 +16,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.Natively",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "Required for audio recording and local transcription."
       }
     },
     "android": {
@@ -34,7 +35,9 @@
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-file-system",
+      "react-native-executorch"
     ],
     "scheme": "Secure Scribe",
     "experiments": {

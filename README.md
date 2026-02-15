@@ -7,7 +7,7 @@ The end goal is a fully local pipeline: record → transcribe → anonymize → 
 ## Features
 
 - **Audio recording** with in-app microphone capture
-- **Speech-to-text** via Mistral Voxtral Transcribe v2 (with transcription keyword support for domain-specific terms)
+- **Speech-to-text** via Mistral Voxtral Transcribe v2 (with transcription keyword support for domain-specific terms), with optional on-device transcription using Voxtral Mini 4B through ExecuTorch on mobile
 - **PII anonymization** — detects and masks phone numbers, emails, addresses, health IDs, credit card numbers, and more using a local PII model
 - **LLM analysis** — sends anonymized transcripts to a configurable LLM provider (OpenAI, Google Gemini, or Mistral) with a custom prompt
 - **Project-based organization** — group recordings into projects with custom fields and export to CSV
@@ -50,6 +50,10 @@ The end goal is a fully local pipeline: record → transcribe → anonymize → 
 │           └── auth-schema.ts  #   Better Auth tables (users, sessions)
 ├── components/                 # Shared UI components
 ├── contexts/                   # React contexts (AuthContext)
+├── hooks/                      # Custom React hooks
+│   └── useHybridTranscribe.ts  #   Unified transcription (local or API)
+├── services/                   # Frontend services
+│   └── LocalModelManager.ts    #   On-device model download & lifecycle
 ├── lib/                        # Auth client config
 ├── utils/                      # API helpers, error logger
 ├── styles/                     # Shared styles
@@ -107,7 +111,9 @@ Audio Recording
       │
       ▼
 Voxtral Transcribe v2  ──►  Raw transcript (with timestamps & speaker labels)
-      │
+(Batch API or local         On mobile, the local Voxtral Mini 4B model is used
+ Voxtral Mini 4B)           when downloaded; otherwise falls back to the Batch API.
+      │                     Web always uses the Batch API.
       ▼
 PII Anonymization       ──►  Masked transcript (local PII model)
       │
@@ -123,7 +129,7 @@ LLM Analysis            ──►  Structured output (summary, action items, etc
 | Backend | Fastify, TypeScript |
 | Database | PostgreSQL (Neon), Drizzle ORM |
 | Auth | Better Auth (email/password + OAuth) |
-| Transcription | Mistral Voxtral Transcribe v2 |
+| Transcription | Mistral Voxtral Transcribe v2 (API), Voxtral Mini 4B via ExecuTorch (on-device) |
 | PII Detection | Local PII anonymization model |
 | LLM Providers | OpenAI, Google Gemini, Mistral |
 
