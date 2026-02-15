@@ -16,6 +16,14 @@ import { ApiKeys } from '@/types';
 import { authenticatedGet, authenticatedPut } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  isLocalModelSupported,
+  checkModelExists,
+  downloadModel,
+  deleteModel,
+} from '@/services/LocalModelManager';
+
+const localModelAvailable = isLocalModelSupported();
 
 export default function SettingsScreen() {
   const { signOut } = useAuth();
@@ -36,9 +44,18 @@ export default function SettingsScreen() {
     type: 'success',
   });
 
+  // Local model state
+  const [modelDownloaded, setModelDownloaded] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
+
   useEffect(() => {
     console.log('[SettingsScreen] Loading API keys');
     loadApiKeys();
+
+    if (localModelAvailable) {
+      checkModelExists().then(setModelDownloaded).catch(() => setModelDownloaded(false));
+    }
   }, []);
 
   const loadApiKeys = async () => {
@@ -104,6 +121,52 @@ export default function SettingsScreen() {
       await signOut();
     } catch (error) {
       console.error('[SettingsScreen] Error signing out:', error);
+    }
+  };
+
+  const handleDownloadModel = async () => {
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    try {
+      await downloadModel((p) => setDownloadProgress(p));
+      setModelDownloaded(true);
+      setModal({
+        visible: true,
+        title: 'Success',
+        message: 'Offline model downloaded successfully. Local transcription is now available.',
+        type: 'success',
+      });
+    } catch (error) {
+      console.error('[SettingsScreen] Error downloading model:', error);
+      setModal({
+        visible: true,
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to download model',
+        type: 'error',
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDeleteModel = async () => {
+    try {
+      await deleteModel();
+      setModelDownloaded(false);
+      setModal({
+        visible: true,
+        title: 'Success',
+        message: 'Offline model removed.',
+        type: 'success',
+      });
+    } catch (error) {
+      console.error('[SettingsScreen] Error deleting model:', error);
+      setModal({
+        visible: true,
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to delete model',
+        type: 'error',
+      });
     }
   };
 
@@ -212,6 +275,69 @@ export default function SettingsScreen() {
               {loading ? 'Saving...' : 'Save API Keys'}
             </Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Offline Model Section */}
+        <View style={[styles.section, !localModelAvailable && styles.sectionDisabled]}>
+          <Text style={styles.sectionTitle}>Offline Transcription</Text>
+          <Text style={styles.sectionDescription}>
+            {localModelAvailable
+              ? 'Download the Voxtral Mini 4B model (~2.5 GB) for on-device transcription. Requires a Development Build (Expo Go is not supported) and at least 6 GB of device RAM.'
+              : 'Local transcription is only available on iOS and Android devices.'}
+          </Text>
+
+          <View style={styles.keyCard}>
+            <View style={styles.keyHeader}>
+              <IconSymbol
+                ios_icon_name="arrow.down.circle"
+                android_material_icon_name="download"
+                size={24}
+                color={localModelAvailable ? colors.primary : colors.textSecondary}
+              />
+              <Text style={[styles.keyTitle, !localModelAvailable && styles.textDisabled]}>
+                Voxtral Mini 4B
+              </Text>
+            </View>
+
+            <Text style={styles.keyStatus}>
+              Status: {modelDownloaded ? 'Downloaded ✓' : 'Not downloaded'}
+            </Text>
+
+            {isDownloading && (
+              <View style={styles.progressBarContainer}>
+                <View style={[styles.progressBar, { width: `${Math.round(downloadProgress * 100)}%` }]} />
+                <Text style={styles.progressText}>
+                  {Math.round(downloadProgress * 100)}%
+                </Text>
+              </View>
+            )}
+
+            {localModelAvailable && !modelDownloaded && !isDownloading && (
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleDownloadModel}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.saveButtonText}>Download Offline Model</Text>
+              </TouchableOpacity>
+            )}
+
+            {localModelAvailable && modelDownloaded && (
+              <TouchableOpacity
+                style={styles.signOutButton}
+                onPress={handleDeleteModel}
+                activeOpacity={0.7}
+              >
+                <IconSymbol
+                  ios_icon_name="trash"
+                  android_material_icon_name="delete"
+                  size={20}
+                  color={colors.error}
+                />
+                <Text style={styles.signOutButtonText}>Remove Model</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -378,5 +504,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.error,
+  },
+  sectionDisabled: {
+    opacity: 0.5,
+  },
+  textDisabled: {
+    color: colors.textSecondary,
+  },
+  progressBarContainer: {
+    height: 24,
+    backgroundColor: colors.border,
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  progressBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+  },
+  progressText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
   },
 });

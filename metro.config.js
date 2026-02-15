@@ -7,6 +7,9 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.unstable_enablePackageExports = true;
 
+// Support loading ExecuTorch model binaries (.pte) and tokenizer files (.bin)
+config.resolver.assetExts.push('pte', 'bin');
+
 // Use turborepo to restore the cache when possible
 config.cacheStores = [
     new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
