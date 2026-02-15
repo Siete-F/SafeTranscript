@@ -18,6 +18,10 @@ import * as FileSystem from 'expo-file-system/legacy';
  *   Expo Go will NOT work.
  */
 
+/**
+ * CDN URL for the quantised Voxtral Mini 4B model.
+ * Replace this placeholder with your actual hosting URL before deployment.
+ */
 const MODEL_URL = 'https://your-cdn.com/voxtral-mini-4b-q4.pte';
 const MODEL_FILENAME = 'voxtral.pte';
 

@@ -305,10 +305,15 @@ export default function SettingsScreen() {
 
             {isDownloading && (
               <View style={styles.progressBarContainer}>
-                <View style={[styles.progressBar, { width: `${Math.round(downloadProgress * 100)}%` }]} />
-                <Text style={styles.progressText}>
-                  {Math.round(downloadProgress * 100)}%
-                </Text>
+                {(() => {
+                  const pct = Math.round(downloadProgress * 100);
+                  return (
+                    <>
+                      <View style={[styles.progressBar, { width: `${pct}%` }]} />
+                      <Text style={styles.progressText}>{pct}%</Text>
+                    </>
+                  );
+                })()}
               </View>
             )}
 

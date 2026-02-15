@@ -70,8 +70,16 @@ export const useHybridTranscribe = () => {
     audioUri: string,
   ): Promise<HybridTranscriptionResult> => {
     // Dynamic require keeps the native module out of the web bundle.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
-    const { transcribeAudio } = require('react-native-executorch');
+    let transcribeAudio: (opts: { modelSource: string; audioUri: string }) => Promise<any>;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+      transcribeAudio = require('react-native-executorch').transcribeAudio;
+    } catch {
+      throw new Error(
+        'react-native-executorch is not available. ' +
+        'Ensure you are running a Development Build with the New Architecture enabled.',
+      );
+    }
 
     const modelPath = getModelPath();
     if (!modelPath) {
