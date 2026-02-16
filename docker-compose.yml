@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  app:
+    image: node:24-alpine
+    container_name: secure_scribe_dev
+    volumes:
+      - .:/app
+
+      # The "Magic" Volume: Prevents host node_modules from clobbering the container's Linux-specific modules.
+      - /app/node_modules
+    working_dir: /app
+    ports:
+      - "8081:8081" # Metro Bundler / Expo
+    stdin_open: true # Keeps the container "listening" (interactive)
+    tty: true # Lets you use a terminal inside the container
+    environment:
+      - EXPO_TOKEN=${EXPO_TOKEN:-} # Optional: Pass your Expo login token

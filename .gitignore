@@ -36,6 +36,5 @@ android/
 ios/
 
 pnpm-lock.yaml
-package-lock.json
 
 backend/tsconfig.tsbuildinfo

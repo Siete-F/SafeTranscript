@@ -1,23 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-
-// Fix for default marker icon in leaflet
-const iconRetinaUrl = require('leaflet/dist/images/marker-icon-2x.png');
-const iconUrl = require('leaflet/dist/images/marker-icon.png');
-const shadowUrl = require('leaflet/dist/images/marker-shadow.png');
-
-// Only run on client side (safe check)
-if (typeof window !== 'undefined') {
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
-    L.Icon.Default.mergeOptions({
-        iconRetinaUrl: iconRetinaUrl,
-        iconUrl: iconUrl,
-        shadowUrl: shadowUrl,
-    });
-}
 
 export interface MapMarker {
     id: string;
@@ -48,40 +30,61 @@ export const Map = ({
         longitudeDelta: 0.0421,
     },
     style,
-    showsUserLocation = false
+    showsUserLocation = false,
 }: MapProps) => {
-
     const zoom = 13;
+
+    const mapHtml = useMemo(() => {
+        const markersJson = JSON.stringify(markers);
+        const centerLat = initialRegion.latitude;
+        const centerLng = initialRegion.longitude;
+
+        return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+            <style>
+                body { margin: 0; padding: 0; }
+                #map { height: 100vh; width: 100vw; }
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            <script>
+                var map = L.map('map').setView([${centerLat}, ${centerLng}], ${zoom});
+
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap'
+                }).addTo(map);
+
+                var markersData = ${markersJson};
+                markersData.forEach(function(m) {
+                    var marker = L.marker([m.latitude, m.longitude]).addTo(map);
+                    if (m.title || m.description) {
+                        marker.bindPopup("<b>" + (m.title || "") + "</b><br>" + (m.description || ""));
+                    }
+                });
+            <\/script>
+        </body>
+        </html>
+        `;
+    }, [markers, initialRegion]);
+
+    const srcDoc = typeof window !== 'undefined' ? mapHtml : undefined;
 
     return (
         <View style={[styles.container, style]}>
-            {/* MapContainer needs a fixed height/width context. React Native Web View provides flex layout, 
-          so direct child div with 100% should work */}
-            <div style={{ height: '100%', width: '100%', minHeight: 200 }}>
-                {typeof window !== 'undefined' && (
-                    <MapContainer
-                        center={[initialRegion.latitude, initialRegion.longitude]}
-                        zoom={zoom}
-                        scrollWheelZoom={false}
-                        style={{ height: '100%', width: '100%' }}
-                    >
-                        <TileLayer
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
-                        {markers.map((marker) => (
-                            <Marker
-                                key={marker.id}
-                                position={[marker.latitude, marker.longitude]}
-                            >
-                                <Popup>
-                                    {marker.title} <br /> {marker.description}
-                                </Popup>
-                            </Marker>
-                        ))}
-                    </MapContainer>
-                )}
-            </div>
+            {typeof window !== 'undefined' && (
+                <iframe
+                    srcDoc={srcDoc}
+                    style={{ width: '100%', height: '100%', border: 'none', minHeight: 200 }}
+                    title="Map"
+                />
+            )}
         </View>
     );
 };
