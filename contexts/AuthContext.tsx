@@ -45,25 +45,52 @@ function openOAuthPopup(provider: string): Promise<string> {
       return;
     }
 
+    let settled = false;
+
+    const cleanup = () => {
+      window.removeEventListener("message", handleMessage);
+      clearInterval(checkClosed);
+      if (bc) {
+        try { bc.close(); } catch {}
+      }
+    };
+
+    const settle = (fn: () => void) => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        fn();
+      }
+    };
+
     const handleMessage = (event: MessageEvent) => {
+      // Only accept messages from our own origin
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === "oauth-success" && event.data?.token) {
-        window.removeEventListener("message", handleMessage);
-        clearInterval(checkClosed);
-        resolve(event.data.token);
+        settle(() => resolve(event.data.token));
       } else if (event.data?.type === "oauth-error") {
-        window.removeEventListener("message", handleMessage);
-        clearInterval(checkClosed);
-        reject(new Error(event.data.error || "OAuth failed"));
+        settle(() => reject(new Error(event.data.error || "OAuth failed")));
       }
     };
 
     window.addEventListener("message", handleMessage);
 
+    // BroadcastChannel fallback for when window.opener is null
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      bc = new BroadcastChannel("oauth-channel");
+      bc.onmessage = (event) => {
+        if (event.data?.type === "oauth-success" && event.data?.token) {
+          settle(() => resolve(event.data.token));
+        } else if (event.data?.type === "oauth-error") {
+          settle(() => reject(new Error(event.data.error || "OAuth failed")));
+        }
+      };
+    }
+
     const checkClosed = setInterval(() => {
       if (popup.closed) {
-        clearInterval(checkClosed);
-        window.removeEventListener("message", handleMessage);
-        reject(new Error("Authentication cancelled"));
+        settle(() => reject(new Error("Authentication cancelled")));
       }
     }, 500);
   });
@@ -72,15 +99,20 @@ function openOAuthPopup(provider: string): Promise<string> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Track whether an OAuth flow is in progress to prevent clearing tokens mid-flow
+  const oauthInProgressRef = React.useRef(false);
 
   useEffect(() => {
     fetchUser();
 
-    // Listen for deep links (e.g. from social auth redirects)
+    // Listen for deep links (e.g. from social auth redirects on native)
     const subscription = Linking.addEventListener("url", (event) => {
       console.log("[AuthContext] Deep link received, refreshing user session");
-      // Allow time for the client to process the token if needed
-      setTimeout(() => fetchUser(), 500);
+      // On web, the popup flow handles token storage and fetchUser directly,
+      // so only refresh on native deep links
+      if (Platform.OS !== "web") {
+        setTimeout(() => fetchUser(), 500);
+      }
     });
 
     // POLLING: Refresh session every 5 minutes to keep SecureStore token in sync
@@ -143,8 +175,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         console.log("[AuthContext] No user session found");
-        setUser(null);
-        await clearAuthTokens();
+        // Don't clear tokens if an OAuth flow is in progress — the token
+        // may arrive momentarily from the popup
+        if (!oauthInProgressRef.current) {
+          setUser(null);
+          await clearAuthTokens();
+        } else {
+          console.log("[AuthContext] OAuth in progress, skipping token clear");
+        }
       }
     } catch (error: any) {
       console.error("[AuthContext] Failed to fetch user:", {
@@ -237,17 +275,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (Platform.OS === "web") {
         console.log(`[AuthContext] Opening ${provider} OAuth popup`);
-        const token = await openOAuthPopup(provider);
-        console.log("[AuthContext] Received token from popup");
-        
-        await setBearerToken(token);
-        
-        // Verify token is retrievable before proceeding
-        const storedToken = await getBearerToken();
-        if (!storedToken) {
-          throw new Error("Failed to persist authentication token");
+        oauthInProgressRef.current = true;
+        try {
+          const token = await openOAuthPopup(provider);
+          console.log("[AuthContext] Received token from popup");
+          
+          await setBearerToken(token);
+          
+          // Verify token is retrievable before proceeding
+          const storedToken = await getBearerToken();
+          if (!storedToken) {
+            throw new Error("Failed to persist authentication token");
+          }
+          console.log("[AuthContext] Token stored successfully");
+        } finally {
+          oauthInProgressRef.current = false;
         }
-        console.log("[AuthContext] Token stored successfully");
         
         await fetchUser();
       } else {

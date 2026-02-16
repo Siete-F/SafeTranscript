@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { Platform } from "react-native";
+import { BEARER_TOKEN_KEY } from "@/lib/auth";
 
 type Status = "processing" | "success" | "error";
 
@@ -22,24 +23,50 @@ export default function AuthCallbackScreen() {
       if (error) {
         setStatus("error");
         setMessage(`Authentication failed: ${error}`);
-        window.opener?.postMessage({ type: "oauth-error", error }, "*");
+        sendToOpener({ type: "oauth-error", error });
         return;
       }
 
       if (token) {
         setStatus("success");
         setMessage("Authentication successful! Closing...");
-        window.opener?.postMessage({ type: "oauth-success", token }, "*");
+        sendToOpener({ type: "oauth-success", token });
         setTimeout(() => window.close(), 1000);
       } else {
         setStatus("error");
         setMessage("No authentication token received");
-        window.opener?.postMessage({ type: "oauth-error", error: "No token" }, "*");
+        sendToOpener({ type: "oauth-error", error: "No token" });
       }
     } catch (err) {
       setStatus("error");
       setMessage("Failed to process authentication");
       console.error("Auth callback error:", err);
+    }
+  };
+
+  /** Post message to the opener window. If window.opener is unavailable
+   *  (popup blocker, new-tab context, etc.), fall back to writing the
+   *  token directly into localStorage so the main window can pick it up. */
+  const sendToOpener = (data: { type: string; token?: string; error?: string }) => {
+    if (window.opener) {
+      window.opener.postMessage(data, window.location.origin);
+    } else {
+      console.warn("[AuthCallback] window.opener is null — using localStorage fallback");
+      if (data.type === "oauth-success" && data.token) {
+        // Write token directly; the main window's auth flow will pick it up
+        // on the next fetchUser call or via a storage event.
+        try {
+          localStorage.setItem(BEARER_TOKEN_KEY, data.token);
+          // Also signal the main page via a BroadcastChannel if available
+          if (typeof BroadcastChannel !== "undefined") {
+            const bc = new BroadcastChannel("oauth-channel");
+            bc.postMessage(data);
+            bc.close();
+          }
+        } catch (e) {
+          console.error("[AuthCallback] localStorage fallback failed:", e);
+        }
+      }
     }
   };
 

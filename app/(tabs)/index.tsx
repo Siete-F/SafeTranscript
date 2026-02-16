@@ -16,9 +16,11 @@ import { colors, commonStyles } from '@/styles/commonStyles';
 import { Project } from '@/types';
 import { authenticatedGet } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function ProjectsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,9 +30,15 @@ export default function ProjectsScreen() {
   });
 
   useEffect(() => {
+    // Only load projects if user is authenticated
+    if (!user) {
+      console.log('[ProjectsScreen] No user, skipping project load');
+      setLoading(false);
+      return;
+    }
     console.log('[ProjectsScreen] Loading projects');
     loadProjects();
-  }, []);
+  }, [user]);
 
   const loadProjects = async () => {
     try {

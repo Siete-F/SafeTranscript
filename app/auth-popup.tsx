@@ -11,7 +11,7 @@ export default function AuthPopupScreen() {
     if (Platform.OS !== "web") return;
 
     if (!provider || !["google", "github", "apple"].includes(provider)) {
-      window.opener?.postMessage({ type: "oauth-error", error: "Invalid provider" }, "*");
+      window.opener?.postMessage({ type: "oauth-error", error: "Invalid provider" }, window.location.origin);
       return;
     }
 
