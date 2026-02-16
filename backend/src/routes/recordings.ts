@@ -180,6 +180,11 @@ export function registerRecordingRoutes(app: App) {
 
       const { id } = request.params;
 
+      if (!id || id === 'undefined' || id === 'null') {
+        app.logger.warn({ recordingId: id }, 'Invalid recording ID');
+        return reply.status(400).send({ error: 'Invalid recording ID' });
+      }
+
       app.logger.info({ recordingId: id }, 'Fetching recording details');
 
       const recording = await app.db.query.recordings.findFirst({
@@ -224,6 +229,12 @@ export function registerRecordingRoutes(app: App) {
       if (!session) return;
 
       const { id } = request.params;
+
+      // Validate that id is a proper value and not 'undefined'
+      if (!id || id === 'undefined' || id === 'null') {
+        app.logger.warn({ recordingId: id }, 'Invalid recording ID for deletion');
+        return reply.status(400).send({ error: 'Invalid recording ID' });
+      }
 
       app.logger.info({ recordingId: id }, 'Deleting recording');
 

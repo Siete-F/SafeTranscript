@@ -97,6 +97,15 @@ export default function ProjectDetailScreen() {
 
   const handleRecordingPress = (recording: Recording) => {
     console.log('ProjectDetailScreen: User tapped recording:', recording.id);
+    if (!recording.id) {
+      setModal({
+        visible: true,
+        title: 'Invalid Recording',
+        message: 'This recording was not created properly. You can delete it by swiping left or using the delete button.',
+        type: 'error',
+      });
+      return;
+    }
     router.push(`/recording/${recording.id}`);
   };
 
@@ -182,11 +191,40 @@ export default function ProjectDetailScreen() {
   const confirmDeleteRecording = async () => {
     if (!recordingToDelete) return;
     try {
-      await authenticatedDelete(`/api/recordings/${recordingToDelete.id}`);
-      setRecordings((prev) => prev.filter((r) => r.id !== recordingToDelete.id));
+      if (recordingToDelete.id) {
+        await authenticatedDelete(`/api/recordings/${recordingToDelete.id}`);
+      }
+      // Remove from local state regardless (handles recordings with undefined IDs)
+      setRecordings((prev) => {
+        if (recordingToDelete.id) {
+          return prev.filter((r) => r.id !== recordingToDelete.id);
+        }
+        // For recordings without an ID, remove by reference equality
+        const idx = prev.indexOf(recordingToDelete);
+        if (idx !== -1) {
+          const next = [...prev];
+          next.splice(idx, 1);
+          return next;
+        }
+        return prev;
+      });
       setRecordingToDelete(null);
     } catch (error) {
       console.error('[ProjectDetailScreen] Error deleting recording:', error);
+      // Even if the API call fails, still remove from local state if the recording has no ID
+      if (!recordingToDelete.id) {
+        setRecordings((prev) => {
+          const idx = prev.indexOf(recordingToDelete);
+          if (idx !== -1) {
+            const next = [...prev];
+            next.splice(idx, 1);
+            return next;
+          }
+          return prev;
+        });
+        setRecordingToDelete(null);
+        return;
+      }
       setModal({
         visible: true,
         title: 'Error',
@@ -253,12 +291,83 @@ export default function ProjectDetailScreen() {
     );
   };
 
-  const renderRecording = ({ item }: { item: Recording }) => {
+  const RecordingCardContent = ({ item }: { item: Recording }) => {
     const statusColor = getStatusColor(item.status);
     const statusLabel = getStatusLabel(item.status);
     const durationText = item.audioDuration ? formatDuration(item.audioDuration) : 'N/A';
-    const dateText = new Date(item.createdAt).toLocaleDateString();
+    const dateText = item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Unknown';
     const needsAttention = item.status === 'error' || (item.status === 'pending' && !item.audioUrl);
+
+    return (
+      <TouchableOpacity
+        style={styles.recordingCard}
+        onPress={() => handleRecordingPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.recordingHeader}>
+          <View style={styles.recordingHeaderLeft}>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+              <Text style={styles.statusText}>{statusLabel}</Text>
+            </View>
+            {needsAttention && (
+              <IconSymbol
+                ios_icon_name="exclamationmark.circle.fill"
+                android_material_icon_name="error"
+                size={20}
+                color={colors.statusError}
+              />
+            )}
+          </View>
+          <View style={styles.recordingHeaderRight}>
+            {Platform.OS === 'web' && (
+              <Pressable
+                onPress={() => handleDeleteRecording(item)}
+                style={styles.webDeleteButton}
+              >
+                <IconSymbol
+                  ios_icon_name="trash.fill"
+                  android_material_icon_name="delete"
+                  size={18}
+                  color={colors.statusError}
+                />
+              </Pressable>
+            )}
+            <Text style={styles.recordingDate}>{dateText}</Text>
+          </View>
+        </View>
+
+        <View style={styles.recordingMeta}>
+          <View style={styles.metaItem}>
+            <IconSymbol
+              ios_icon_name="clock.fill"
+              android_material_icon_name="access-time"
+              size={16}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.metaText}>{durationText}</Text>
+          </View>
+        </View>
+
+        {item.llmOutput && (
+          <Text style={styles.recordingPreview} numberOfLines={2}>
+            {item.llmOutput}
+          </Text>
+        )}
+        
+        {needsAttention && !item.audioUrl && (
+          <Text style={styles.recordingWarning}>
+            Audio upload required
+          </Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderRecording = ({ item }: { item: Recording }) => {
+    // On web, skip ReanimatedSwipeable to avoid SwipeDirection crash
+    if (Platform.OS === 'web') {
+      return <RecordingCardContent item={item} />;
+    }
 
     return (
       <ReanimatedSwipeable
@@ -270,52 +379,7 @@ export default function ProjectDetailScreen() {
         )}
         overshootRight={false}
       >
-        <TouchableOpacity
-          style={styles.recordingCard}
-          onPress={() => handleRecordingPress(item)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.recordingHeader}>
-            <View style={styles.recordingHeaderLeft}>
-              <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-                <Text style={styles.statusText}>{statusLabel}</Text>
-              </View>
-              {needsAttention && (
-                <IconSymbol
-                  ios_icon_name="exclamationmark.circle.fill"
-                  android_material_icon_name="error"
-                  size={20}
-                  color={colors.statusError}
-                />
-              )}
-            </View>
-            <Text style={styles.recordingDate}>{dateText}</Text>
-          </View>
-
-          <View style={styles.recordingMeta}>
-            <View style={styles.metaItem}>
-              <IconSymbol
-                ios_icon_name="clock.fill"
-                android_material_icon_name="access-time"
-                size={16}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.metaText}>{durationText}</Text>
-            </View>
-          </View>
-
-          {item.llmOutput && (
-            <Text style={styles.recordingPreview} numberOfLines={2}>
-              {item.llmOutput}
-            </Text>
-          )}
-          
-          {needsAttention && !item.audioUrl && (
-            <Text style={styles.recordingWarning}>
-              Audio upload required
-            </Text>
-          )}
-        </TouchableOpacity>
+        <RecordingCardContent item={item} />
       </ReanimatedSwipeable>
     );
   };
@@ -382,7 +446,7 @@ export default function ProjectDetailScreen() {
       <FlatList
         data={recordings}
         renderItem={renderRecording}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item.id || `recording-${index}`}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={!loading ? emptyComponent : null}
         refreshControl={
@@ -467,6 +531,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  recordingHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  webDeleteButton: {
+    padding: 4,
+    borderRadius: 4,
   },
   statusBadge: {
     paddingHorizontal: 12,
