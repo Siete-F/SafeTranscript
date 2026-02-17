@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors, commonStyles } from '@/styles/commonStyles';
 import { Project, Recording } from '@/types';
@@ -81,8 +82,15 @@ export default function ProjectDetailScreen() {
   useEffect(() => {
     console.log('[ProjectDetailScreen] Loading project:', id);
     loadProject();
-    loadRecordings();
-  }, [id, loadProject, loadRecordings]);
+  }, [id, loadProject]);
+
+  // Reload recordings every time the screen gains focus (e.g. after creating a new recording)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[ProjectDetailScreen] Screen focused, reloading recordings');
+      loadRecordings();
+    }, [loadRecordings])
+  );
 
   const handleRefresh = () => {
     console.log('ProjectDetailScreen: User triggered refresh');

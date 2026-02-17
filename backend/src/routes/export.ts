@@ -188,7 +188,7 @@ function generateCSV(recordings: any[], project: any): string {
     ...customFieldArray,
     'Transcription Length',
     'Anonymized',
-    'Output Preview',
+    'LLM Output',
     'Status',
   ];
 
@@ -207,9 +207,7 @@ function generateCSV(recordings: any[], project: any): string {
 
     const transcriptionLength = recording.transcription?.length || 0;
     const isAnonymized = recording.anonymizedTranscription ? 'Yes' : 'No';
-    const outputPreview = recording.llmOutput
-      ? recording.llmOutput.substring(0, 100).replace(/"/g, '""') + (recording.llmOutput.length > 100 ? '...' : '')
-      : '';
+    const llmOutput = recording.llmOutput || '';
 
     const row = [
       date,
@@ -217,7 +215,7 @@ function generateCSV(recordings: any[], project: any): string {
       ...customValues,
       String(transcriptionLength),
       isAnonymized,
-      outputPreview,
+      llmOutput,
       recording.status,
     ];
 

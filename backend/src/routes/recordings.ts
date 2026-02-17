@@ -44,6 +44,19 @@ export function registerRecordingRoutes(app: App) {
             type: 'array',
             items: {
               type: 'object',
+              additionalProperties: true,
+              properties: {
+                id: { type: 'string' },
+                projectId: { type: 'string' },
+                status: { type: 'string' },
+                audioUrl: { type: 'string', nullable: true },
+                audioDuration: { type: 'number', nullable: true },
+                customFieldValues: { type: 'object', nullable: true },
+                llmOutput: { type: 'string', nullable: true },
+                errorMessage: { type: 'string', nullable: true },
+                createdAt: { type: 'string' },
+                updatedAt: { type: 'string' },
+              },
             },
           },
         },
@@ -70,10 +83,13 @@ export function registerRecordingRoutes(app: App) {
       const recordings = await app.db
         .select({
           id: schema.recordings.id,
+          projectId: schema.recordings.projectId,
           status: schema.recordings.status,
           audioUrl: schema.recordings.audioUrl,
           audioDuration: schema.recordings.audioDuration,
           customFieldValues: schema.recordings.customFieldValues,
+          llmOutput: schema.recordings.llmOutput,
+          errorMessage: schema.recordings.errorMessage,
           createdAt: schema.recordings.createdAt,
           updatedAt: schema.recordings.updatedAt,
         })
@@ -170,6 +186,7 @@ export function registerRecordingRoutes(app: App) {
         response: {
           200: {
             type: 'object',
+            additionalProperties: true,
           },
         },
       },
@@ -468,6 +485,7 @@ export function registerRecordingRoutes(app: App) {
         app.logger.info({ recordingId: id }, 'Audio file uploaded successfully');
 
         // Trigger transcription pipeline asynchronously
+        app.logger.info({ recordingId: id, projectId: recording.projectId }, 'Triggering async processing pipeline');
         setImmediate(async () => {
           try {
             const project = await app.db.query.projects.findFirst({
@@ -770,21 +788,37 @@ export function registerRecordingRoutes(app: App) {
 
 // Helper function to trigger the full processing pipeline
 async function triggerProcessingPipeline(app: App, recordingId: string, project: any) {
+  const pipelineStart = Date.now();
   try {
+    app.logger.info({ recordingId, projectId: project.id }, '[Pipeline] Starting processing pipeline');
+
     const recording = await app.db.query.recordings.findFirst({
       where: eq(schema.recordings.id, recordingId),
     });
 
-    if (!recording || !recording.audioUrl) return;
+    if (!recording || !recording.audioUrl) {
+      app.logger.warn({ recordingId, hasRecording: !!recording, hasAudioUrl: !!recording?.audioUrl }, '[Pipeline] Aborting - recording or audio URL missing');
+      return;
+    }
 
     // Step 1: Transcribe
+    app.logger.info({ recordingId }, '[Pipeline] Step 1/3: Starting transcription');
     await app.db
       .update(schema.recordings)
       .set({ status: 'transcribing' })
       .where(eq(schema.recordings.id, recordingId));
 
+    const transcribeStart = Date.now();
     const audioBuffer = await app.storage.download(recording.audioUrl);
+    app.logger.info({ recordingId, audioSizeBytes: audioBuffer.length }, '[Pipeline] Audio file downloaded, sending to transcription service');
+    
     const transcriptionData = await processTranscription(audioBuffer, project.sensitiveWords);
+    const transcribeMs = Date.now() - transcribeStart;
+    
+    app.logger.info(
+      { recordingId, transcriptionLength: transcriptionData.fullText.length, segmentCount: transcriptionData.segments.length, durationMs: transcribeMs },
+      '[Pipeline] Step 1/3: Transcription completed'
+    );
 
     await app.db
       .update(schema.recordings)
@@ -796,13 +830,21 @@ async function triggerProcessingPipeline(app: App, recordingId: string, project:
 
     // Step 2: Anonymize (if enabled)
     if (project.enableAnonymization) {
+      app.logger.info({ recordingId }, '[Pipeline] Step 2/3: Starting anonymization');
       await app.db
         .update(schema.recordings)
         .set({ status: 'anonymizing' })
         .where(eq(schema.recordings.id, recordingId));
 
+      const anonymizeStart = Date.now();
       const { anonymized, mappings } = await anonymizeTranscription(
         transcriptionData.fullText
+      );
+      const anonymizeMs = Date.now() - anonymizeStart;
+
+      app.logger.info(
+        { recordingId, piiMappingCount: Object.keys(mappings).length, anonymizedLength: anonymized.length, durationMs: anonymizeMs },
+        '[Pipeline] Step 2/3: Anonymization completed'
       );
 
       await app.db
@@ -812,9 +854,12 @@ async function triggerProcessingPipeline(app: App, recordingId: string, project:
           piiMappings: mappings,
         })
         .where(eq(schema.recordings.id, recordingId));
+    } else {
+      app.logger.info({ recordingId }, '[Pipeline] Step 2/3: Anonymization skipped (disabled for project)');
     }
 
     // Step 3: Process with LLM
+    app.logger.info({ recordingId, provider: project.llmProvider, model: project.llmModel }, '[Pipeline] Step 3/3: Starting LLM processing');
     await app.db
       .update(schema.recordings)
       .set({ status: 'processing' })
@@ -832,6 +877,12 @@ async function triggerProcessingPipeline(app: App, recordingId: string, project:
       ? updatedRecording?.anonymizedTranscription || transcriptionData.fullText
       : transcriptionData.fullText;
 
+    app.logger.info(
+      { recordingId, textToProcessLength: textToProcess.length, usingAnonymized: project.enableAnonymization && !!updatedRecording?.anonymizedTranscription },
+      '[Pipeline] Sending text to LLM'
+    );
+
+    const llmStart = Date.now();
     const llmOutput = await processWithLLM(
       app,
       textToProcess,
@@ -840,10 +891,17 @@ async function triggerProcessingPipeline(app: App, recordingId: string, project:
       project.llmPrompt,
       apiKeys
     );
+    const llmMs = Date.now() - llmStart;
+
+    app.logger.info(
+      { recordingId, llmOutputLength: llmOutput.length, durationMs: llmMs },
+      '[Pipeline] Step 3/3: LLM processing completed'
+    );
 
     let finalOutput = llmOutput;
     if (project.enableAnonymization && updatedRecording?.piiMappings) {
       finalOutput = reversePIIMappings(llmOutput, updatedRecording.piiMappings);
+      app.logger.info({ recordingId, finalOutputLength: finalOutput.length }, '[Pipeline] PII mappings reversed in LLM output');
     }
 
     await app.db
@@ -854,9 +912,14 @@ async function triggerProcessingPipeline(app: App, recordingId: string, project:
       })
       .where(eq(schema.recordings.id, recordingId));
 
-    app.logger.info({ recordingId }, 'Processing pipeline completed successfully');
+    const totalMs = Date.now() - pipelineStart;
+    app.logger.info(
+      { recordingId, totalDurationMs: totalMs, transcribeMs, llmMs },
+      '[Pipeline] Processing pipeline completed successfully'
+    );
   } catch (error) {
-    app.logger.error({ recordingId, err: error }, 'Processing pipeline failed');
+    const totalMs = Date.now() - pipelineStart;
+    app.logger.error({ recordingId, err: error, totalDurationMs: totalMs }, '[Pipeline] Processing pipeline failed');
     await app.db
       .update(schema.recordings)
       .set({ status: 'error', errorMessage: (error as Error).message })

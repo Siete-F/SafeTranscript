@@ -56,6 +56,8 @@ export async function anonymizeTranscription(text: string): Promise<Anonymizatio
   const mappings: Record<string, string> = {};
   let anonymized = text;
 
+  console.log(`[Anonymization] Starting PII detection on ${text.length} chars of text`);
+
   // Track counters for each PII type
   const counters: Record<string, number> = {
     phone: 1,
@@ -126,6 +128,12 @@ export async function anonymizeTranscription(text: string): Promise<Anonymizatio
     const regex = new RegExp(`\\b${escapeRegex(match.value)}\\b`, 'gi');
     anonymized = anonymized.replace(regex, match.placeholder);
     mappings[match.placeholder] = match.value;
+  }
+
+  console.log(`[Anonymization] PII detection complete: found ${Object.keys(mappings).length} PII items`);
+  if (Object.keys(mappings).length > 0) {
+    const piiTypes = [...new Set(Object.keys(mappings).map(k => k.replace(/ \d+>$/, '>').replace(/^</, '')))];
+    console.log(`[Anonymization] PII types detected: ${piiTypes.join(', ')}`);
   }
 
   return {

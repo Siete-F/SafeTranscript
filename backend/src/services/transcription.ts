@@ -26,32 +26,43 @@ export async function processTranscription(audioBuffer: Buffer, sensitiveWords?:
     const mistralApiKey = process.env.MISTRAL_API_KEY;
 
     if (!mistralApiKey) {
+      console.warn('[Transcription] MISTRAL_API_KEY not configured - returning fallback transcription');
       // Fallback for development without API key
       return getFallbackTranscription();
+    }
+
+    console.log(`[Transcription] Starting transcription of ${audioBuffer.length} bytes audio`);
+    if (sensitiveWords && sensitiveWords.length > 0) {
+      console.log(`[Transcription] Using ${sensitiveWords.length} sensitive words for vocabulary hints`);
     }
 
     // Create a temporary file for the audio
     const tempDir = os.tmpdir();
     const tempFile = path.join(tempDir, `audio-${Date.now()}.wav`);
     fs.writeFileSync(tempFile, audioBuffer);
+    console.log(`[Transcription] Audio written to temp file: ${tempFile}`);
 
     try {
       // Initialize Mistral client
       const client = new Mistral({
         apiKey: mistralApiKey,
       });
+      console.log('[Transcription] Mistral client initialized');
 
       // Read the audio file
       const audioData = fs.readFileSync(tempFile);
       const audioBase64 = audioData.toString('base64');
+      console.log(`[Transcription] Audio file read (${audioData.length} bytes), uploading to Mistral...`);
 
       // Call Mistral Voxtral Transcribe 2 API with batch processing
       const response = await client.files.upload({
         file: new File([audioData], `audio-${Date.now()}.wav`, { type: 'audio/wav' }),
       });
+      console.log(`[Transcription] File uploaded to Mistral, file ID: ${response.id}`);
 
       // The file has been uploaded, now we need to call the transcription API
       // Note: Voxtral Transcribe 2 requires the file to be processed
+      console.log('[Transcription] Calling Voxtral Transcribe API...');
       const transcriptionResult = await callVoxtralTranscribe(
         client,
         response.id || '',
@@ -62,9 +73,11 @@ export async function processTranscription(audioBuffer: Buffer, sensitiveWords?:
 
       // Parse the response and create segments
       const segments = parseVoxtralResponse(transcriptionResult);
+      const fullText = extractFullText(segments);
+      console.log(`[Transcription] Transcription complete: ${segments.length} segments, ${fullText.length} chars total`);
 
       return {
-        fullText: extractFullText(segments),
+        fullText,
         segments,
       };
     } finally {
@@ -76,7 +89,7 @@ export async function processTranscription(audioBuffer: Buffer, sensitiveWords?:
       }
     }
   } catch (error) {
-    console.error('Transcription error:', error);
+    console.error('[Transcription] Transcription error:', error);
     // Return fallback on error
     return getFallbackTranscription();
   }
@@ -119,6 +132,7 @@ async function callVoxtralTranscribe(
 
     // Make direct API call to Mistral Voxtral Transcribe endpoint
     const apiKey = process.env.MISTRAL_API_KEY || '';
+    console.log('[Transcription] Sending request to Mistral Voxtral Transcribe API...');
     const response = await fetch('https://api.mistral.ai/v1/audio/transcription', {
       method: 'POST',
       headers: {
@@ -128,13 +142,16 @@ async function callVoxtralTranscribe(
     });
 
     if (!response.ok) {
+      const errorBody = await response.text().catch(() => 'unable to read error body');
+      console.error(`[Transcription] Mistral API error: ${response.status} ${response.statusText} - ${errorBody}`);
       throw new Error(`Mistral API error: ${response.statusText}`);
     }
 
     const data = await response.json();
+    console.log('[Transcription] Voxtral API response received successfully');
     return data;
   } catch (error) {
-    console.error('Error calling Voxtral Transcribe:', error);
+    console.error('[Transcription] Error calling Voxtral Transcribe:', error);
     throw error;
   }
 }
