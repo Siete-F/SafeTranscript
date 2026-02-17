@@ -366,9 +366,9 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.infoCard}>
             <Text style={styles.infoText}>
-              Secure Scribe - Audio Transcription & PII Anonymization
+              Safe Transcript - Audio Transcription & PII Anonymization
             </Text>
-            <Text style={styles.infoText}>Version 1.0.0</Text>
+            <Text style={styles.infoText}>Version 1.0.1</Text>
           </View>
         </View>
       </ScrollView>

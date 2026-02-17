@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Secure Scribe is a privacy-focused audio transcription app. It records audio, transcribes it with Mistral Voxtral Transcribe v2 Realtime, anonymizes PII using a local model, and processes the result with a configurable LLM. The goal is a fully local pipeline where sensitive data never leaves the device.
+Safe Transcript is a privacy-focused audio transcription app. It records audio, transcribes it with Mistral Voxtral Transcribe v2 Realtime, anonymizes PII using a local model, and processes the result with a configurable LLM. The goal is a fully local pipeline where sensitive data never leaves the device.
 
 ## Repository Structure
 

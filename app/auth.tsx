@@ -121,7 +121,7 @@ export default function AuthScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.content}>
-          <Text style={styles.title}>Secure Scribe</Text>
+          <Text style={styles.title}>Safe Transcript</Text>
           <Text style={styles.subtitle}>
             {mode === "signin" ? "Welcome back" : "Create your account"}
           </Text>

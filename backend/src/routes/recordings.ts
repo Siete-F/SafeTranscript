@@ -39,27 +39,6 @@ export function registerRecordingRoutes(app: App) {
             projectId: { type: 'string' },
           },
         },
-        response: {
-          200: {
-            type: 'array',
-            items: {
-              type: 'object',
-              additionalProperties: true,
-              properties: {
-                id: { type: 'string' },
-                projectId: { type: 'string' },
-                status: { type: 'string' },
-                audioUrl: { type: 'string', nullable: true },
-                audioDuration: { type: 'number', nullable: true },
-                customFieldValues: { type: 'object', nullable: true },
-                llmOutput: { type: 'string', nullable: true },
-                errorMessage: { type: 'string', nullable: true },
-                createdAt: { type: 'string' },
-                updatedAt: { type: 'string' },
-              },
-            },
-          },
-        },
       },
     },
     async (request: FastifyRequest<{ Params: ProjectIdParams }>, reply: FastifyReply) => {
@@ -96,8 +75,18 @@ export function registerRecordingRoutes(app: App) {
         .from(schema.recordings)
         .where(eq(schema.recordings.projectId, projectId));
 
-      app.logger.info({ count: recordings.length }, 'Recordings fetched successfully');
-      return recordings;
+      // Explicitly serialize dates to ISO strings to avoid fast-json-stringify issues
+      const serialized = recordings.map((r) => ({
+        ...r,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+        updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
+      }));
+
+      app.logger.info(
+        { count: serialized.length, sample: serialized.length > 0 ? { id: serialized[0].id, status: serialized[0].status, createdAt: serialized[0].createdAt } : null },
+        'Recordings fetched successfully'
+      );
+      return serialized;
     }
   );
 
@@ -306,6 +295,7 @@ export function registerRecordingRoutes(app: App) {
         response: {
           200: {
             type: 'object',
+            additionalProperties: true,
           },
         },
       },
@@ -523,6 +513,7 @@ export function registerRecordingRoutes(app: App) {
         response: {
           200: {
             type: 'object',
+            additionalProperties: true,
           },
         },
       },
@@ -613,6 +604,7 @@ export function registerRecordingRoutes(app: App) {
         response: {
           200: {
             type: 'object',
+            additionalProperties: true,
           },
         },
       },
@@ -697,6 +689,7 @@ export function registerRecordingRoutes(app: App) {
         response: {
           200: {
             type: 'object',
+            additionalProperties: true,
           },
         },
       },

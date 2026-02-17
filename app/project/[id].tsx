@@ -65,6 +65,12 @@ export default function ProjectDetailScreen() {
     try {
       console.log('[ProjectDetailScreen] Fetching recordings from API');
       const data = await authenticatedGet<Recording[]>(`/api/projects/${id}/recordings`);
+      console.log('[ProjectDetailScreen] Raw recordings response:', JSON.stringify(data?.slice(0, 2), null, 2));
+      if (data?.length > 0) {
+        const sample = data[0];
+        console.log('[ProjectDetailScreen] First recording keys:', Object.keys(sample));
+        console.log('[ProjectDetailScreen] First recording id:', sample.id, 'status:', sample.status, 'createdAt:', sample.createdAt);
+      }
       setRecordings(data);
     } catch (error) {
       console.error('[ProjectDetailScreen] Error loading recordings:', error);

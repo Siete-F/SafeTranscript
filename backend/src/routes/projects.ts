@@ -20,6 +20,7 @@ export function registerProjectRoutes(app: App) {
             type: 'array',
             items: {
               type: 'object',
+              additionalProperties: true,
               properties: {
                 id: { type: 'string' },
                 name: { type: 'string' },
@@ -63,6 +64,7 @@ export function registerProjectRoutes(app: App) {
             .where(eq(schema.recordings.projectId, project.id));
           return {
             ...project,
+            createdAt: project.createdAt instanceof Date ? project.createdAt.toISOString() : project.createdAt,
             recordingCount: value,
           };
         })
@@ -172,6 +174,7 @@ export function registerProjectRoutes(app: App) {
         response: {
           200: {
             type: 'object',
+            additionalProperties: true,
           },
         },
       },
@@ -243,6 +246,7 @@ export function registerProjectRoutes(app: App) {
         response: {
           200: {
             type: 'object',
+            additionalProperties: true,
           },
         },
       },
