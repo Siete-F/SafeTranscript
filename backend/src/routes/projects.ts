@@ -130,18 +130,23 @@ export function registerProjectRoutes(app: App) {
         'Creating project'
       );
 
+      // Provide explicit values for all columns to avoid DEFAULT keyword
+      // which is not supported by the Neon serverless HTTP driver
+      const now = new Date();
       const insertValues: NewProject = {
+        id: crypto.randomUUID(),
         userId: session.user.id,
         name,
+        description: description || null,
         llmProvider,
         llmModel,
         llmPrompt,
         enableAnonymization: enableAnonymization ?? true,
+        customFields: customFields && customFields.length > 0 ? customFields : null,
+        sensitiveWords: sensitiveWords && sensitiveWords.length > 0 ? sensitiveWords : null,
+        createdAt: now,
+        updatedAt: now,
       };
-
-      if (description) insertValues.description = description;
-      if (customFields) insertValues.customFields = customFields;
-      if (sensitiveWords) insertValues.sensitiveWords = sensitiveWords;
 
       const [project] = await app.db.insert(schema.projects).values(insertValues).returning();
 

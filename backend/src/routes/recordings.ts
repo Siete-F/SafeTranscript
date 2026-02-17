@@ -139,14 +139,19 @@ export function registerRecordingRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
-      // Create recording
+      // Create recording - provide explicit values for all columns
+      // to avoid DEFAULT keyword (not supported by Neon HTTP driver)
+      const now = new Date();
       const [recording] = await app.db
         .insert(schema.recordings)
         .values({
+          id: crypto.randomUUID(),
           projectId,
           userId: session.user.id,
-          status: 'pending',
-          customFieldValues,
+          status: 'pending' as const,
+          customFieldValues: customFieldValues || null,
+          createdAt: now,
+          updatedAt: now,
         })
         .returning();
 

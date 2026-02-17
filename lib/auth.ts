@@ -10,37 +10,44 @@ const API_URL = Constants.expoConfig?.extra?.backendUrl;
 export const BEARER_TOKEN_KEY = "safetranscript_bearer_token";
 
 // Platform-specific storage: localStorage for web, SecureStore for native
-const storage = Platform.OS === "web"
-  ? {
-      getItem: (key: string) => {
-        const value = localStorage.getItem(key);
-        console.log("[Auth Storage] getItem:", key, value ? "exists" : "null");
-        return value;
-      },
-      setItem: (key: string, value: string) => {
-        console.log("[Auth Storage] setItem:", key);
-        localStorage.setItem(key, value);
-      },
-      deleteItem: (key: string) => {
-        console.log("[Auth Storage] deleteItem:", key);
-        localStorage.removeItem(key);
-      },
+// Use synchronous interface as required by better-auth/expo
+const storage = {
+  getItem: (key: string) => {
+    if (Platform.OS === "web") {
+      const value = localStorage.getItem(key);
+      console.log("[Auth Storage] getItem:", key, value ? "exists" : "null");
+      return value;
     }
-  : {
-      getItem: async (key: string) => {
-        const value = await SecureStore.getItemAsync(key);
-        console.log("[Auth Storage] getItem:", key, value ? "exists" : "null");
-        return value;
-      },
-      setItem: async (key: string, value: string) => {
-        console.log("[Auth Storage] setItem:", key);
-        await SecureStore.setItemAsync(key, value);
-      },
-      deleteItem: async (key: string) => {
-        console.log("[Auth Storage] deleteItem:", key);
-        await SecureStore.deleteItemAsync(key);
-      },
-    };
+    // For native, return null synchronously (SecureStore is async-only)
+    // The expoClient plugin will handle async storage operations separately
+    console.log("[Auth Storage] getItem:", key, "(native - async)");
+    return null;
+  },
+  setItem: (key: string, value: string) => {
+    if (Platform.OS === "web") {
+      console.log("[Auth Storage] setItem:", key);
+      localStorage.setItem(key, value);
+    } else {
+      console.log("[Auth Storage] setItem:", key, "(native - async)");
+      // Fire and forget for native async storage
+      SecureStore.setItemAsync(key, value).catch((err) => {
+        console.error("[Auth Storage] Failed to set item:", err);
+      });
+    }
+  },
+  deleteItem: (key: string) => {
+    if (Platform.OS === "web") {
+      console.log("[Auth Storage] deleteItem:", key);
+      localStorage.removeItem(key);
+    } else {
+      console.log("[Auth Storage] deleteItem:", key, "(native - async)");
+      // Fire and forget for native async storage
+      SecureStore.deleteItemAsync(key).catch((err) => {
+        console.error("[Auth Storage] Failed to delete item:", err);
+      });
+    }
+  },
+};
 
 export const authClient = createAuthClient({
   baseURL: API_URL,

@@ -95,7 +95,14 @@ export function registerApiKeyRoutes(app: App) {
 
         if (!apiKeyRecord) {
           // Create new record if doesn't exist
-          const updates: any = { userId: session.user.id };
+          // Provide explicit values for id/timestamps to avoid DEFAULT keyword
+          const now = new Date();
+          const updates: any = {
+            id: crypto.randomUUID(),
+            userId: session.user.id,
+            createdAt: now,
+            updatedAt: now,
+          };
           if (openaiKey) updates.openaiKey = openaiKey;
           if (geminiKey) updates.geminiKey = geminiKey;
           if (mistralKey) updates.mistralKey = mistralKey;
