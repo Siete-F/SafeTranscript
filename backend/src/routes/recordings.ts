@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 import { processTranscription } from '../services/transcription.js';
@@ -835,14 +835,15 @@ export function registerRecordingRoutes(app: App) {
     }
   );
 
-  // GET /api/recordings/debug/list - Debug endpoint to list all recordings with manual serialization
+  // GET /api/debug/recordings - Debug endpoint to list all recordings with manual serialization
   // This bypasses the framework serializer to help diagnose empty-object issues
+  // Placed at /api/debug/* to avoid route conflicts with /api/recordings/:id
   fastify.get(
-    '/api/recordings/debug/list',
+    '/api/debug/recordings',
     {
       schema: {
         description: 'Debug: list all recordings for current user (bypasses serializer)',
-        tags: ['recordings'],
+        tags: ['debug'],
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
@@ -872,6 +873,39 @@ export function registerRecordingRoutes(app: App) {
       return reply
         .header('content-type', 'application/json')
         .send(JSON.stringify(serialized, null, 2));
+    }
+  );
+
+  // GET /api/debug/schema - Show database table structure
+  fastify.get(
+    '/api/debug/schema',
+    {
+      schema: {
+        description: 'Debug: show database table structure',
+        tags: ['debug'],
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      try {
+        const result = await app.db.execute(sql`
+          SELECT table_name, column_name, data_type, is_nullable, column_default
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name IN ('projects', 'recordings', 'api_keys')
+          ORDER BY table_name, ordinal_position
+        `);
+
+        return reply
+          .header('content-type', 'application/json')
+          .send(JSON.stringify(result.rows || result, null, 2));
+      } catch (err) {
+        return reply
+          .header('content-type', 'application/json')
+          .send(JSON.stringify({ error: (err as Error).message }, null, 2));
+      }
     }
   );
 }

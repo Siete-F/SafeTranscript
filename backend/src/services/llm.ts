@@ -1,7 +1,7 @@
-import { gateway } from '@specific-dev/framework';
-import { generateText } from 'ai';
+import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Mistral } from '@mistralai/mistralai';
 import type { App } from '../index.js';
-import * as schema from '../db/schema.js';
 
 export interface ApiKeyRecord {
   openaiKey?: string;
@@ -11,7 +11,7 @@ export interface ApiKeyRecord {
 
 /**
  * Process text with LLM using configured provider
- * Supports OpenAI, Gemini, and Mistral
+ * Supports OpenAI, Gemini, and Mistral via their native SDKs
  */
 export async function processWithLLM(
   app: App,
@@ -21,22 +21,50 @@ export async function processWithLLM(
   prompt: string,
   apiKeys?: ApiKeyRecord
 ): Promise<string> {
+  const fullPrompt = `${prompt}\n\nText to process:\n${text}`;
+
+  app.logger.info({ provider, model }, 'Processing text with LLM');
+
   try {
-    app.logger.info(
-      { provider, model },
-      'Processing text with LLM'
-    );
+    let response: string;
 
-    // Build the full prompt
-    const fullPrompt = `${prompt}\n\nText to process:\n${text}`;
-
-    // Use the framework gateway for LLM access
-    // The gateway handles authentication automatically
-    const { text: response } = await generateText({
-      model: gateway(`${provider}/${model}`),
-      prompt: fullPrompt,
-      temperature: 0.7,
-    });
+    switch (provider) {
+      case 'openai': {
+        const apiKey = apiKeys?.openaiKey || process.env.OPENAI_API_KEY;
+        if (!apiKey) throw new Error('OpenAI API key not configured. Add it in Settings → API Keys.');
+        const client = new OpenAI({ apiKey });
+        const result = await client.chat.completions.create({
+          model,
+          messages: [{ role: 'user', content: fullPrompt }],
+          temperature: 0.7,
+        });
+        response = result.choices[0]?.message?.content || '';
+        break;
+      }
+      case 'gemini': {
+        const apiKey = apiKeys?.geminiKey || process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error('Gemini API key not configured. Add it in Settings → API Keys.');
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const genModel = genAI.getGenerativeModel({ model });
+        const result = await genModel.generateContent(fullPrompt);
+        response = result.response.text();
+        break;
+      }
+      case 'mistral': {
+        const apiKey = apiKeys?.mistralKey || process.env.MISTRAL_API_KEY;
+        if (!apiKey) throw new Error('Mistral API key not configured. Add it in Settings → API Keys.');
+        const client = new Mistral({ apiKey });
+        const result = await client.chat.complete({
+          model,
+          messages: [{ role: 'user', content: fullPrompt }],
+          temperature: 0.7,
+        });
+        response = result.choices?.[0]?.message?.content as string || '';
+        break;
+      }
+      default:
+        throw new Error(`Unsupported LLM provider: ${provider}`);
+    }
 
     app.logger.info(
       { provider, model, responseLength: response.length },
@@ -107,18 +135,14 @@ export function getProviderFromModel(model: string): string {
  * Check if API keys are configured for a provider
  */
 export function hasApiKeysForProvider(apiKeys: ApiKeyRecord | undefined, provider: string): boolean {
-  if (!apiKeys) {
-    // If using framework gateway, API keys are managed automatically
-    return true;
-  }
-
+  // Check user-provided keys first, then fall back to environment variables
   switch (provider) {
     case 'openai':
-      return !!apiKeys.openaiKey;
+      return !!(apiKeys?.openaiKey || process.env.OPENAI_API_KEY);
     case 'gemini':
-      return !!apiKeys.geminiKey;
+      return !!(apiKeys?.geminiKey || process.env.GEMINI_API_KEY);
     case 'mistral':
-      return !!apiKeys.mistralKey;
+      return !!(apiKeys?.mistralKey || process.env.MISTRAL_API_KEY);
     default:
       return false;
   }
@@ -128,23 +152,15 @@ export function hasApiKeysForProvider(apiKeys: ApiKeyRecord | undefined, provide
  * Process text with streaming (for real-time updates)
  */
 export async function processWithLLMStreaming(
+  app: App,
+  text: string,
   provider: string,
   model: string,
   prompt: string,
-  text: string,
-  onChunk: (chunk: string) => void
+  apiKeys?: ApiKeyRecord
 ): Promise<string> {
-  // This would be used for streaming responses
-  // Implementation depends on the framework's streaming capabilities
-
   // For now, fall back to non-streaming
-  return processWithLLM(
-    {} as App, // This would need to be passed in properly in real implementation
-    text,
-    provider,
-    model,
-    prompt
-  );
+  return processWithLLM(app, text, provider, model, prompt, apiKeys);
 }
 
 /**
