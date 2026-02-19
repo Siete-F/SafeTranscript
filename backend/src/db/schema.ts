@@ -13,7 +13,7 @@ import type { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
 // Projects table
 export const projects = pgTable('projects', {
-  id: uuid('id').primaryKey().defaultRandom(),
+  id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   description: text('description'),
@@ -25,22 +25,22 @@ export const projects = pgTable('projects', {
   enableAnonymization: boolean('enable_anonymization').default(true).notNull(),
   customFields: jsonb('custom_fields').$type<Array<{ name: string; type: 'text' | 'number' | 'date' }>>(),
   sensitiveWords: jsonb('sensitive_words').$type<string[]>(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).$defaultFn(() => new Date()).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
+    .$defaultFn(() => new Date())
     .$onUpdate(() => new Date())
     .notNull(),
 });
 
 // Recordings table
 export const recordings = pgTable('recordings', {
-  id: uuid('id').primaryKey().defaultRandom(),
+  id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull(),
   status: text('status', {
     enum: ['pending', 'transcribing', 'anonymizing', 'processing', 'done', 'error'],
   })
-    .default('pending')
+    .$defaultFn(() => 'pending' as const)
     .notNull(),
   audioUrl: text('audio_url'),
   audioDuration: integer('audio_duration'), // in seconds
@@ -51,9 +51,9 @@ export const recordings = pgTable('recordings', {
   piiMappings: jsonb('pii_mappings').$type<Record<string, string>>(),
   llmOutput: text('llm_output'),
   errorMessage: text('error_message'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).$defaultFn(() => new Date()).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
+    .$defaultFn(() => new Date())
     .$onUpdate(() => new Date())
     .notNull(),
 });
@@ -62,14 +62,14 @@ export const recordings = pgTable('recordings', {
 export const apiKeys = pgTable(
   'api_keys',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: uuid('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
     userId: text('user_id').notNull().unique(),
     openaiKey: text('openai_key'),
     geminiKey: text('gemini_key'),
     mistralKey: text('mistral_key'),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).$defaultFn(() => new Date()).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
+      .$defaultFn(() => new Date())
       .$onUpdate(() => new Date())
       .notNull(),
   },

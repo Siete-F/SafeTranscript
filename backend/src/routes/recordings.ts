@@ -86,7 +86,13 @@ export function registerRecordingRoutes(app: App) {
         { count: serialized.length, sample: serialized.length > 0 ? { id: serialized[0].id, status: serialized[0].status, createdAt: serialized[0].createdAt } : null },
         'Recordings fetched successfully'
       );
-      return serialized;
+
+      // Bypass fast-json-stringify by manually serializing the response
+      // The framework's serializer may strip properties when the response schema
+      // doesn't match the actual data shape
+      return reply
+        .header('content-type', 'application/json')
+        .send(JSON.stringify(serialized));
     }
   );
 
@@ -404,6 +410,52 @@ export function registerRecordingRoutes(app: App) {
 
       app.logger.info({ recordingId: id }, 'Audio URL generated');
       return reply.redirect(url);
+    }
+  );
+
+  // GET /api/recordings/:id/audio-url - Get signed audio URL (JSON)
+  fastify.get<{ Params: RecordingParams }>(
+    '/api/recordings/:id/audio-url',
+    {
+      schema: {
+        description: 'Get signed audio URL as JSON',
+        tags: ['recordings'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              url: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: RecordingParams }>, reply: FastifyReply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const { id } = request.params;
+
+      const recording = await app.db.query.recordings.findFirst({
+        where: eq(schema.recordings.id, id),
+      });
+
+      if (!recording || recording.userId !== session.user.id) {
+        return reply.status(404).send({ error: 'Recording not found' });
+      }
+
+      if (!recording.audioUrl) {
+        return reply.status(404).send({ error: 'Audio not available' });
+      }
+
+      const { url } = await app.storage.getSignedUrl(recording.audioUrl);
+      return { url };
     }
   );
 
@@ -780,6 +832,46 @@ export function registerRecordingRoutes(app: App) {
           .where(eq(schema.recordings.id, id));
         return reply.status(500).send({ error: 'LLM processing failed' });
       }
+    }
+  );
+
+  // GET /api/recordings/debug/list - Debug endpoint to list all recordings with manual serialization
+  // This bypasses the framework serializer to help diagnose empty-object issues
+  fastify.get(
+    '/api/recordings/debug/list',
+    {
+      schema: {
+        description: 'Debug: list all recordings for current user (bypasses serializer)',
+        tags: ['recordings'],
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const recordings = await app.db
+        .select({
+          id: schema.recordings.id,
+          projectId: schema.recordings.projectId,
+          status: schema.recordings.status,
+          audioUrl: schema.recordings.audioUrl,
+          audioDuration: schema.recordings.audioDuration,
+          createdAt: schema.recordings.createdAt,
+          updatedAt: schema.recordings.updatedAt,
+        })
+        .from(schema.recordings)
+        .where(eq(schema.recordings.userId, session.user.id));
+
+      const serialized = recordings.map((r) => ({
+        ...r,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+        updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
+        audioDownloadUrl: r.id ? `/api/recordings/${r.id}/audio` : null,
+      }));
+
+      return reply
+        .header('content-type', 'application/json')
+        .send(JSON.stringify(serialized, null, 2));
     }
   );
 }
