@@ -135,30 +135,22 @@ export default function RecordingDetailScreen() {
 
     setRetrying(true);
     try {
-      console.log('[RecordingDetailScreen] User triggered retry processing');
-      runProcessingPipeline(recording.id, recording.projectId).catch(console.error);
-      
-      setModal({
-        visible: true,
-        title: 'Processing',
-        message: 'Transcription started. Refresh to see updates.',
-        type: 'success',
-      });
-      
-      // Reload the recording after a short delay
-      setTimeout(() => {
-        loadRecording();
-      }, 2000);
+      // Skip transcription if one already exists (blob URLs may no longer be valid)
+      const skipTranscription = !!recording.transcription;
+      console.log(`[RecordingDetailScreen] User triggered reprocessing (skipTranscription=${skipTranscription})`);
+      await runProcessingPipeline(recording.id, recording.projectId, { skipTranscription });
+      await loadRecording();
     } catch (error) {
-      console.error('[RecordingDetailScreen] Error retrying transcription:', error);
+      console.error('[RecordingDetailScreen] Error during reprocessing:', error);
       setModal({
         visible: true,
         title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to retry transcription',
+        message: error instanceof Error ? error.message : 'Failed to reprocess recording',
         type: 'error',
       });
     } finally {
       setRetrying(false);
+      await loadRecording();
     }
   };
 
@@ -363,6 +355,29 @@ export default function RecordingDetailScreen() {
               </View>
             </View>
           </View>
+        )}
+
+        {recording.audioPath && (
+          <TouchableOpacity
+            style={styles.reprocessButton}
+            onPress={handleRetryTranscription}
+            disabled={retrying}
+            activeOpacity={0.7}
+          >
+            {retrying ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <IconSymbol
+                ios_icon_name="arrow.clockwise"
+                android_material_icon_name="refresh"
+                size={16}
+                color={colors.primary}
+              />
+            )}
+            <Text style={styles.reprocessButtonText}>
+              {retrying ? 'Reprocessing...' : 'Reprocess'}
+            </Text>
+          </TouchableOpacity>
         )}
 
         {recording.transcription && (
@@ -701,6 +716,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.card,
+  },
+  reprocessButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: `${colors.primary}15`,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    gap: 6,
+  },
+  reprocessButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
   },
   deleteButton: {
     flexDirection: 'row',

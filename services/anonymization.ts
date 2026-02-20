@@ -1,8 +1,11 @@
 /**
  * PII Detection and Anonymization Service
- * Detects and masks personally identifiable information
- * (Ported from backend — pure regex logic, no Node.js APIs)
+ * Detects and masks personally identifiable information.
+ * Uses GLiNER model when available, falls back to regex patterns.
  */
+
+import { isGLiNERAvailable, detectPII } from './gliner/GLiNERInference';
+import { LABEL_TO_TYPE } from './gliner/config';
 
 export interface AnonymizationResult {
   anonymized: string;
@@ -10,17 +13,32 @@ export interface AnonymizationResult {
 }
 
 const PII_PATTERNS = {
-  phone: /\b(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b/g,
+  // International phone: +xx, 7-15 digits with optional separators
+  phone: /(?:\+\d{1,3}[-.\s]?)?\(?\d{1,4}\)?[-.\s]?\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{0,4}\b/g,
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
   creditCard: /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
+  // US SSN or Dutch BSN (7-9 digits preceded by BSN/bsn keyword)
   ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
   passport: /\b[A-Z]{1,2}\d{6,9}\b/g,
-  address: /\b\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Circle|Cir|Terrace|Ter|Way|Park|Parkway|Pkwy|Place|Pl|Square|Sq|Trail|Trl|Park)\b/gi,
+  address: /\b\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Circle|Cir|Terrace|Ter|Way|Park|Parkway|Pkwy|Place|Pl|Square|Sq|Trail|Trl|Park|straat|laan|weg|plein|gracht|kade|singel)\b/gi,
   bankAccount: /\b\d{9,17}\b(?=.*account|.*account)/gi,
   healthInsuranceId: /\b[A-Z]{2}\d{10}\b/g,
   dateOfBirth: /\b(?:0[1-9]|1[0-2])[-\/](?:0[1-9]|[12]\d|3[01])[-\/](?:19|20)\d{2}\b/g,
   ipAddress: /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/g,
 };
+
+/**
+ * Context-based PII patterns: match numbers preceded by identifying keywords.
+ * These catch things like "BSN is 1234567" or "telefoonnummer is 06123456789"
+ */
+const CONTEXT_PII_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
+  // BSN / social security / sofi preceded by keyword
+  { type: 'ssn', pattern: /(?:BSN|bsn|sofi|burgerservicenummer|social\s+security)\s+(?:is|:)?\s*(\d{7,9})/gi },
+  // Phone/tel preceded by keyword (any digit sequence 7-15 chars)
+  { type: 'phone', pattern: /(?:telefoon(?:nummer)?|phone\s*(?:number)?|tel|mobiel|mobile|nummer)\s+(?:is|:)?\s*(\+?\d[\d\s\-\.]{6,17}\d)/gi },
+  // Account/IBAN preceded by keyword
+  { type: 'bankAccount', pattern: /(?:rekening(?:nummer)?|account\s*(?:number)?|IBAN)\s+(?:is|:)?\s*([A-Z]{2}\d{2}\s?[A-Z]{4}\s?[\d\s]{8,26}|\d{9,17})/gi },
+];
 
 interface PiiMatch {
   type: string;
@@ -29,6 +47,47 @@ interface PiiMatch {
 }
 
 export async function anonymizeTranscription(text: string): Promise<AnonymizationResult> {
+  // Try GLiNER model first, fall back to regex
+  try {
+    if (await isGLiNERAvailable()) {
+      console.log('[Anonymization] Using GLiNER model');
+      return anonymizeWithGLiNER(text);
+    }
+  } catch (error) {
+    console.warn('[Anonymization] GLiNER failed, falling back to regex:', error);
+  }
+
+  console.log('[Anonymization] Using regex fallback');
+  return anonymizeWithRegex(text);
+}
+
+/** GLiNER-based anonymization */
+async function anonymizeWithGLiNER(text: string): Promise<AnonymizationResult> {
+  const entities = await detectPII(text);
+  const mappings: Record<string, string> = {};
+  let anonymized = text;
+
+  // Build counters per type
+  const counters: Record<string, number> = {};
+
+  // Sort entities by position (reverse order) so replacements don't shift offsets
+  const sorted = [...entities].sort((a, b) => b.start - a.start);
+
+  for (const entity of sorted) {
+    const type = LABEL_TO_TYPE[entity.label] || entity.label;
+    if (!counters[type]) counters[type] = 1;
+    const placeholder = `<${type} ${counters[type]}>`;
+    counters[type]++;
+
+    mappings[placeholder] = entity.text;
+    anonymized = anonymized.slice(0, entity.start) + placeholder + anonymized.slice(entity.end);
+  }
+
+  return { anonymized, mappings };
+}
+
+/** Regex-based anonymization (original implementation) */
+async function anonymizeWithRegex(text: string): Promise<AnonymizationResult> {
   const mappings: Record<string, string> = {};
   let anonymized = text;
 
@@ -49,6 +108,23 @@ export async function anonymizeTranscription(text: string): Promise<Anonymizatio
         placeholder: `<${type} ${counters[type]}>`,
       });
       counters[type]++;
+    }
+  }
+
+  // Context-based patterns (keyword + number)
+  for (const { type, pattern } of CONTEXT_PII_PATTERNS) {
+    if (!counters[type]) counters[type] = 1;
+    let ctxMatch;
+    while ((ctxMatch = pattern.exec(text)) !== null) {
+      const value = ctxMatch[1].trim(); // Capture group 1 = the actual PII value
+      if (!matches.some((m) => m.value === value)) {
+        matches.push({
+          type,
+          value,
+          placeholder: `<${type} ${counters[type]}>`,
+        });
+        counters[type]++;
+      }
     }
   }
 

@@ -7,8 +7,8 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.unstable_enablePackageExports = true;
 
-// Support loading ExecuTorch model binaries (.pte) and tokenizer files (.bin)
-config.resolver.assetExts.push('pte', 'bin');
+// Support loading ExecuTorch model binaries (.pte), tokenizer files (.bin), and ONNX models
+config.resolver.assetExts.push('pte', 'bin', 'onnx');
 
 // Use turborepo to restore the cache when possible
 config.cacheStores = [

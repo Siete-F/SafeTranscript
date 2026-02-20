@@ -21,6 +21,12 @@ import {
   downloadModel,
   deleteModel,
 } from '@/services/LocalModelManager';
+import {
+  checkGLiNERModelExists,
+  downloadGLiNERModel,
+  deleteGLiNERModel,
+} from '@/services/gliner/GLiNERModelManager';
+import { disposeGLiNER } from '@/services/gliner/GLiNERInference';
 
 const localModelAvailable = isLocalModelSupported();
 
@@ -46,11 +52,16 @@ export default function SettingsScreen() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  const [piiModelDownloaded, setPiiModelDownloaded] = useState(false);
+  const [piiDownloadProgress, setPiiDownloadProgress] = useState(0);
+  const [isPiiDownloading, setIsPiiDownloading] = useState(false);
+
   useEffect(() => {
     loadApiKeys();
     if (localModelAvailable) {
       checkModelExists().then(setModelDownloaded).catch(() => setModelDownloaded(false));
     }
+    checkGLiNERModelExists().then(setPiiModelDownloaded).catch(() => setPiiModelDownloaded(false));
   }, []);
 
   const loadApiKeys = async () => {
@@ -111,6 +122,31 @@ export default function SettingsScreen() {
       setModal({ visible: true, title: 'Success', message: 'Offline model removed.', type: 'success' });
     } catch (error) {
       setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete model', type: 'error' });
+    }
+  };
+
+  const handleDownloadPiiModel = async () => {
+    setIsPiiDownloading(true);
+    setPiiDownloadProgress(0);
+    try {
+      await downloadGLiNERModel((p) => setPiiDownloadProgress(p));
+      setPiiModelDownloaded(true);
+      setModal({ visible: true, title: 'Success', message: 'PII detection model downloaded successfully.', type: 'success' });
+    } catch (error) {
+      setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to download PII model', type: 'error' });
+    } finally {
+      setIsPiiDownloading(false);
+    }
+  };
+
+  const handleDeletePiiModel = async () => {
+    try {
+      await disposeGLiNER();
+      await deleteGLiNERModel();
+      setPiiModelDownloaded(false);
+      setModal({ visible: true, title: 'Success', message: 'PII detection model removed. Regex fallback will be used.', type: 'success' });
+    } catch (error) {
+      setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete PII model', type: 'error' });
     }
   };
 
@@ -189,6 +225,37 @@ export default function SettingsScreen() {
             )}
             {localModelAvailable && modelDownloaded && (
               <TouchableOpacity style={styles.deleteModelButton} onPress={handleDeleteModel} activeOpacity={0.7}>
+                <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={20} color={colors.error} />
+                <Text style={styles.deleteModelButtonText}>Remove Model</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>PII Detection Model</Text>
+          <Text style={styles.sectionDescription}>
+            Download the GLiNER PII model (~50 MB) for improved entity recognition. When not downloaded, regex-based detection is used.
+          </Text>
+          <View style={styles.keyCard}>
+            <View style={styles.keyHeader}>
+              <IconSymbol ios_icon_name="shield.checkered" android_material_icon_name="security" size={24} color={colors.secondary} />
+              <Text style={styles.keyTitle}>GLiNER PII Edge</Text>
+            </View>
+            <Text style={styles.keyStatus}>Status: {piiModelDownloaded ? 'Downloaded ✓' : 'Not downloaded (using regex fallback)'}</Text>
+            <Text style={styles.keyNote}>Detects 16+ PII types including names, emails, phone numbers, SSNs, addresses, and more</Text>
+            {isPiiDownloading && (
+              <View style={styles.progressBarContainer}>
+                {(() => { const pct = Math.round(piiDownloadProgress * 100); return (<><View style={[styles.progressBar, { width: `${pct}%` }]} /><Text style={styles.progressText}>{pct}%</Text></>); })()}
+              </View>
+            )}
+            {!piiModelDownloaded && !isPiiDownloading && (
+              <TouchableOpacity style={styles.saveButton} onPress={handleDownloadPiiModel} activeOpacity={0.7}>
+                <Text style={styles.saveButtonText}>Download PII Model</Text>
+              </TouchableOpacity>
+            )}
+            {piiModelDownloaded && (
+              <TouchableOpacity style={styles.deleteModelButton} onPress={handleDeletePiiModel} activeOpacity={0.7}>
                 <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={20} color={colors.error} />
                 <Text style={styles.deleteModelButtonText}>Remove Model</Text>
               </TouchableOpacity>
