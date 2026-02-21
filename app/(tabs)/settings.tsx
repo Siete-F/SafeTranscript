@@ -25,8 +25,11 @@ import {
   checkGLiNERModelExists,
   downloadGLiNERModel,
   deleteGLiNERModel,
+  getDownloadedVariant,
 } from '@/services/gliner/GLiNERModelManager';
 import { disposeGLiNER } from '@/services/gliner/GLiNERInference';
+import { MODEL_VARIANTS, DEFAULT_VARIANT } from '@/services/gliner/config';
+import type { ModelVariantId } from '@/services/gliner/config';
 
 const localModelAvailable = isLocalModelSupported();
 
@@ -55,6 +58,8 @@ export default function SettingsScreen() {
   const [piiModelDownloaded, setPiiModelDownloaded] = useState(false);
   const [piiDownloadProgress, setPiiDownloadProgress] = useState(0);
   const [isPiiDownloading, setIsPiiDownloading] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState<ModelVariantId>(DEFAULT_VARIANT);
+  const [downloadedVariant, setDownloadedVariant] = useState<ModelVariantId | null>(null);
 
   useEffect(() => {
     loadApiKeys();
@@ -62,6 +67,10 @@ export default function SettingsScreen() {
       checkModelExists().then(setModelDownloaded).catch(() => setModelDownloaded(false));
     }
     checkGLiNERModelExists().then(setPiiModelDownloaded).catch(() => setPiiModelDownloaded(false));
+    getDownloadedVariant().then((v) => {
+      setDownloadedVariant(v);
+      if (v) setSelectedVariant(v);
+    }).catch(() => {});
   }, []);
 
   const loadApiKeys = async () => {
@@ -129,9 +138,12 @@ export default function SettingsScreen() {
     setIsPiiDownloading(true);
     setPiiDownloadProgress(0);
     try {
-      await downloadGLiNERModel((p) => setPiiDownloadProgress(p));
+      await disposeGLiNER(); // release any existing model first
+      await downloadGLiNERModel((p) => setPiiDownloadProgress(p), selectedVariant);
       setPiiModelDownloaded(true);
-      setModal({ visible: true, title: 'Success', message: 'PII detection model downloaded successfully.', type: 'success' });
+      setDownloadedVariant(selectedVariant);
+      const variant = MODEL_VARIANTS[selectedVariant];
+      setModal({ visible: true, title: 'Success', message: `${variant.name} downloaded successfully.`, type: 'success' });
     } catch (error) {
       setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to download PII model', type: 'error' });
     } finally {
@@ -144,6 +156,7 @@ export default function SettingsScreen() {
       await disposeGLiNER();
       await deleteGLiNERModel();
       setPiiModelDownloaded(false);
+      setDownloadedVariant(null);
       setModal({ visible: true, title: 'Success', message: 'PII detection model removed. Regex fallback will be used.', type: 'success' });
     } catch (error) {
       setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete PII model', type: 'error' });
@@ -235,15 +248,55 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>PII Detection Model</Text>
           <Text style={styles.sectionDescription}>
-            Download the GLiNER PII model (~50 MB) for improved entity recognition. When not downloaded, regex-based detection is used.
+            Download a GLiNER multilingual model for improved entity recognition (names, organizations, locations, and more). Supports Dutch and 100+ languages. When not downloaded, regex-based detection is used as fallback.
           </Text>
+
+          {/* Variant picker — only show when no model downloaded or switching */}
+          {!piiModelDownloaded && !isPiiDownloading && (
+            <View style={styles.keyCard}>
+              <Text style={[styles.keyTitle, { marginBottom: 12 }]}>Choose Model Size</Text>
+              {(Object.keys(MODEL_VARIANTS) as ModelVariantId[]).map((variantId) => {
+                const variant = MODEL_VARIANTS[variantId];
+                const isSelected = selectedVariant === variantId;
+                return (
+                  <TouchableOpacity
+                    key={variantId}
+                    style={[styles.variantOption, isSelected && styles.variantOptionSelected]}
+                    onPress={() => setSelectedVariant(variantId)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.variantRadio}>
+                      <View style={[styles.variantRadioInner, isSelected && styles.variantRadioInnerSelected]} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.variantName, isSelected && styles.variantNameSelected]}>
+                        {variant.name}
+                      </Text>
+                      <Text style={styles.variantDesc}>{variant.description}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
           <View style={styles.keyCard}>
             <View style={styles.keyHeader}>
               <IconSymbol ios_icon_name="shield.checkered" android_material_icon_name="security" size={24} color={colors.secondary} />
-              <Text style={styles.keyTitle}>GLiNER PII Edge</Text>
+              <Text style={styles.keyTitle}>GLiNER Multi v2.1</Text>
             </View>
-            <Text style={styles.keyStatus}>Status: {piiModelDownloaded ? 'Downloaded ✓' : 'Not downloaded (using regex fallback)'}</Text>
-            <Text style={styles.keyNote}>Detects 16+ PII types including names, emails, phone numbers, SSNs, addresses, and more</Text>
+            <Text style={styles.keyStatus}>
+              Status: {(() => {
+                if (!piiModelDownloaded) return 'Not downloaded (using regex fallback)';
+                const variantName = downloadedVariant ? MODEL_VARIANTS[downloadedVariant].name : 'Unknown variant';
+                return `Downloaded ✓ (${variantName})`;
+              })()}
+            </Text>
+            <Text style={styles.keyNote}>
+              {piiModelDownloaded
+                ? 'Hybrid mode active: GLiNER detects names, organizations & locations + regex catches emails, phones, SSNs, and other structured patterns.'
+                : `Detects 20+ PII types including person names, organizations, locations, emails, phone numbers, IBANs, and more. Works in Dutch and English.`}
+            </Text>
             {isPiiDownloading && (
               <View style={styles.progressBarContainer}>
                 {(() => { const pct = Math.round(piiDownloadProgress * 100); return (<><View style={[styles.progressBar, { width: `${pct}%` }]} /><Text style={styles.progressText}>{pct}%</Text></>); })()}
@@ -251,10 +304,12 @@ export default function SettingsScreen() {
             )}
             {!piiModelDownloaded && !isPiiDownloading && (
               <TouchableOpacity style={styles.saveButton} onPress={handleDownloadPiiModel} activeOpacity={0.7}>
-                <Text style={styles.saveButtonText}>Download PII Model</Text>
+                <Text style={styles.saveButtonText}>
+                  Download {MODEL_VARIANTS[selectedVariant].name} ({MODEL_VARIANTS[selectedVariant].sizeMB} MB)
+                </Text>
               </TouchableOpacity>
             )}
-            {piiModelDownloaded && (
+            {piiModelDownloaded && !isPiiDownloading && (
               <TouchableOpacity style={styles.deleteModelButton} onPress={handleDeletePiiModel} activeOpacity={0.7}>
                 <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={20} color={colors.error} />
                 <Text style={styles.deleteModelButtonText}>Remove Model</Text>
@@ -303,4 +358,12 @@ const styles = StyleSheet.create({
   progressBarContainer: { height: 24, backgroundColor: colors.border, borderRadius: 12, marginBottom: 12, overflow: 'hidden', justifyContent: 'center' },
   progressBar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.primary, borderRadius: 12 },
   progressText: { fontSize: 12, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  variantOption: { flexDirection: 'row' as const, alignItems: 'center' as const, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 10, marginBottom: 8, gap: 10 },
+  variantOptionSelected: { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
+  variantRadio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.textSecondary, alignItems: 'center' as const, justifyContent: 'center' as const },
+  variantRadioInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: 'transparent' },
+  variantRadioInnerSelected: { backgroundColor: colors.primary },
+  variantName: { fontSize: 15, fontWeight: '600', color: colors.text },
+  variantNameSelected: { color: colors.primary },
+  variantDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 });

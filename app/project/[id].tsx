@@ -9,6 +9,9 @@ import {
   RefreshControl,
   Platform,
   Pressable,
+  ScrollView,
+  TextInput,
+  Switch,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,11 +19,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors, commonStyles } from '@/styles/commonStyles';
-import { Project, Recording } from '@/types';
-import { getProjectById } from '@/db/operations/projects';
-import { getRecordingsByProject, deleteRecording } from '@/db/operations/recordings';
+import { Project, Recording, LLM_PROVIDERS } from '@/types';
+import { getProjectById, updateProject } from '@/db/operations/projects';
+import { getRecordingsByProject, deleteRecording, updateRecording } from '@/db/operations/recordings';
 import { exportProjectCSV } from '@/db/operations/export';
 import { getAudioFileUri } from '@/services/audioStorage';
+import { runProcessingPipeline } from '@/services/processing';
 import { Modal } from '@/components/ui/Modal';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -48,6 +52,22 @@ export default function ProjectDetailScreen() {
   const [recordingToDelete, setRecordingToDelete] = useState<Recording | null>(null);
   const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null);
   const [playableAudioUrl, setPlayableAudioUrl] = useState('');
+
+  // Config modal state
+  const [configVisible, setConfigVisible] = useState(false);
+  const [configName, setConfigName] = useState('');
+  const [configDescription, setConfigDescription] = useState('');
+  const [configLlmProvider, setConfigLlmProvider] = useState<'openai' | 'gemini' | 'mistral'>('gemini');
+  const [configLlmModel, setConfigLlmModel] = useState('');
+  const [configLlmPrompt, setConfigLlmPrompt] = useState('');
+  const [configEnableLlm, setConfigEnableLlm] = useState(true);
+  const [configEnableAnon, setConfigEnableAnon] = useState(true);
+  const [configSensitiveWords, setConfigSensitiveWords] = useState('');
+  const [configSaving, setConfigSaving] = useState(false);
+
+  // Reprocess prompt state
+  const [reprocessVisible, setReprocessVisible] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
 
   const audioPlayer = useAudioPlayer(playableAudioUrl);
   const playerStatus = useAudioPlayerStatus(audioPlayer);
@@ -288,24 +308,26 @@ export default function ProjectDetailScreen() {
   };
 
   const getStatusColor = (status: Recording['status']) => {
-    const statusColors = {
+    const statusColors: Record<Recording['status'], string> = {
       pending: colors.statusPending,
       transcribing: colors.statusTranscribing,
       anonymizing: colors.statusAnonymizing,
       processing: colors.statusProcessing,
       done: colors.statusDone,
+      stale: colors.statusStale,
       error: colors.statusError,
     };
     return statusColors[status];
   };
 
   const getStatusLabel = (status: Recording['status']) => {
-    const labels = {
+    const labels: Record<Recording['status'], string> = {
       pending: 'Pending',
       transcribing: 'Transcribing',
       anonymizing: 'Anonymizing',
       processing: 'Processing',
       done: 'Done',
+      stale: 'Stale',
       error: 'Error',
     };
     return labels[status];

@@ -20,6 +20,7 @@ export const colors = {
   statusAnonymizing: '#8B5CF6',
   statusProcessing: '#F59E0B',
   statusDone: '#10B981',
+  statusStale: '#F97316',
   statusError: '#EF4444',
 };
 

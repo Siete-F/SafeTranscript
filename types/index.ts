@@ -6,6 +6,7 @@ export interface Project {
   llmProvider: 'openai' | 'gemini' | 'mistral';
   llmModel: string;
   llmPrompt: string;
+  enableLlm: boolean;
   enableAnonymization: boolean;
   customFields: CustomField[];
   sensitiveWords: string[];
@@ -22,7 +23,7 @@ export interface CustomField {
 export interface Recording {
   id: string;
   projectId: string;
-  status: 'pending' | 'transcribing' | 'anonymizing' | 'processing' | 'done' | 'error';
+  status: 'pending' | 'transcribing' | 'anonymizing' | 'processing' | 'done' | 'error' | 'stale';
   audioPath?: string;
   audioDuration?: number;
   customFieldValues: Record<string, any>;
@@ -52,21 +53,21 @@ export const LLM_PROVIDERS = {
   openai: {
     name: 'OpenAI',
     models: [
-      { id: 'gpt-4', name: 'GPT-4 (Deep Research)' },
+      { id: 'gpt-4', name: 'GPT-4 (Smart)' },
       { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (Fast)' },
     ],
   },
   gemini: {
     name: 'Google Gemini',
     models: [
-      { id: 'gemini-pro', name: 'Gemini Pro (Deep Research)' },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Smart)' },
       { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Fast)' },
     ],
   },
   mistral: {
     name: 'Mistral AI',
     models: [
-      { id: 'mistral-large-latest', name: 'Mistral Large (Deep Research)' },
+      { id: 'mistral-large-latest', name: 'Mistral Large (Smart)' },
       { id: 'mistral-small-latest', name: 'Mistral Small (Fast)' },
     ],
   },

@@ -1,17 +1,37 @@
 /**
  * GLiNER Model Manager — Native Platform (iOS/Android)
  * Downloads and stores model files using expo-file-system.
+ * Supports multiple model variants (INT8, FP16).
  */
 
-import * as FileSystem from 'expo-file-system';
-import { MODEL_FILES } from './config';
+import * as FileSystem from 'expo-file-system/legacy';
+import { MODEL_VARIANTS, DEFAULT_VARIANT } from './config';
+import type { ModelVariantId } from './config';
 
 const MODEL_DIR = `${FileSystem.documentDirectory}gliner-pii/`;
+
+/** File that records which variant is currently stored */
+const VARIANT_FILE = `${MODEL_DIR}variant.txt`;
 
 async function ensureModelDir(): Promise<void> {
   const info = await FileSystem.getInfoAsync(MODEL_DIR);
   if (!info.exists) {
     await FileSystem.makeDirectoryAsync(MODEL_DIR, { intermediates: true });
+  }
+}
+
+/**
+ * Get the currently downloaded variant, or null if none.
+ */
+export async function getDownloadedVariant(): Promise<ModelVariantId | null> {
+  try {
+    const info = await FileSystem.getInfoAsync(VARIANT_FILE);
+    if (!info.exists) return null;
+    const content = await FileSystem.readAsStringAsync(VARIANT_FILE);
+    const id = content.trim() as ModelVariantId;
+    return MODEL_VARIANTS[id] ? id : null;
+  } catch {
+    return null;
   }
 }
 
@@ -32,27 +52,32 @@ export async function checkGLiNERModelExists(): Promise<boolean> {
 /**
  * Download model files from HuggingFace.
  * @param onProgress - Progress callback (0 to 1)
+ * @param variantId - Which model variant to download (default: multi_int8)
  */
 export async function downloadGLiNERModel(
   onProgress: (progress: number) => void,
+  variantId: ModelVariantId = DEFAULT_VARIANT,
 ): Promise<void> {
+  const variant = MODEL_VARIANTS[variantId];
+  if (!variant) throw new Error(`Unknown model variant: ${variantId}`);
+
   await ensureModelDir();
 
   // Download config
   onProgress(0);
   console.log('[GLiNERModelManager] Downloading gliner_config.json...');
-  await FileSystem.downloadAsync(MODEL_FILES.glinerConfig, `${MODEL_DIR}gliner_config.json`);
+  await FileSystem.downloadAsync(variant.urls.glinerConfig, `${MODEL_DIR}gliner_config.json`);
   onProgress(0.02);
 
   // Download tokenizer
   console.log('[GLiNERModelManager] Downloading tokenizer.json...');
-  await FileSystem.downloadAsync(MODEL_FILES.tokenizer, `${MODEL_DIR}tokenizer.json`);
+  await FileSystem.downloadAsync(variant.urls.tokenizer, `${MODEL_DIR}tokenizer.json`);
   onProgress(0.1);
 
   // Download model (with progress)
-  console.log('[GLiNERModelManager] Downloading model_quint8.onnx...');
+  console.log(`[GLiNERModelManager] Downloading ${variant.name} (${variant.sizeMB} MB)...`);
   const downloader = FileSystem.createDownloadResumable(
-    MODEL_FILES.model,
+    variant.urls.model,
     `${MODEL_DIR}model.onnx`,
     {},
     (downloadProgress) => {
@@ -62,8 +87,12 @@ export async function downloadGLiNERModel(
   );
 
   await downloader.downloadAsync();
+
+  // Record which variant was downloaded
+  await FileSystem.writeAsStringAsync(VARIANT_FILE, variantId);
+
   onProgress(1);
-  console.log('[GLiNERModelManager] All files downloaded.');
+  console.log(`[GLiNERModelManager] ${variant.name} downloaded.`);
 }
 
 /**
@@ -108,7 +137,7 @@ export async function loadGLiNERModelFiles(): Promise<{
     const binaryString = atob(modelBase64);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+      bytes[i] = binaryString.codePointAt(i) ?? 0;
     }
 
     return { modelBuffer: bytes.buffer, tokenizerJson, glinerConfig };

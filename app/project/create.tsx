@@ -24,6 +24,7 @@ export default function CreateProjectScreen() {
   const [llmProvider, setLlmProvider] = useState<'openai' | 'gemini' | 'mistral'>('gemini');
   const [llmModel, setLlmModel] = useState('gemini-1.5-flash');
   const [llmPrompt, setLlmPrompt] = useState('Summarize the key points and action items from this recording.');
+  const [enableLlm, setEnableLlm] = useState(true);
   const [enableAnonymization, setEnableAnonymization] = useState(true);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [sensitiveWordsText, setSensitiveWordsText] = useState('');
@@ -51,7 +52,7 @@ export default function CreateProjectScreen() {
       return;
     }
 
-    if (!llmPrompt.trim()) {
+    if (enableLlm && !llmPrompt.trim()) {
       setModal({
         visible: true,
         title: 'Validation Error',
@@ -74,6 +75,7 @@ export default function CreateProjectScreen() {
         llmProvider,
         llmModel,
         llmPrompt,
+        enableLlm,
         enableAnonymization,
         customFields: (customFields && customFields.length > 0) ? customFields : undefined,
         sensitiveWords: parsedSensitiveWords.length > 0 ? parsedSensitiveWords : undefined,
@@ -166,8 +168,33 @@ export default function CreateProjectScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>LLM Configuration</Text>
 
-          <View style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>Provider</Text>
+          <View style={styles.switchContainer}>
+            <View style={styles.switchLabel}>
+              <IconSymbol
+                ios_icon_name="cpu"
+                android_material_icon_name="memory"
+                size={20}
+                color={enableLlm ? colors.primary : colors.textSecondary}
+              />
+              <View style={styles.switchTextContainer}>
+                <Text style={styles.switchTitle}>Enable LLM Processing</Text>
+                <Text style={styles.switchDescription}>
+                  Process transcriptions with an LLM after recording
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={enableLlm}
+              onValueChange={setEnableLlm}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.card}
+            />
+          </View>
+
+          {enableLlm && (
+            <>
+              <View style={[styles.fieldContainer, { marginTop: 16 }]}>
+                <Text style={styles.fieldLabel}>Provider</Text>
             <View style={styles.providerButtons}>
               {Object.entries(LLM_PROVIDERS).map(([key, provider]) => (
                 <TouchableOpacity
@@ -230,6 +257,8 @@ export default function CreateProjectScreen() {
               numberOfLines={4}
             />
           </View>
+            </>
+          )}
         </View>
 
         <View style={styles.section}>

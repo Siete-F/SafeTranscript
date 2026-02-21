@@ -1,10 +1,8 @@
 /**
- * GLiNER Token-Level Decoder
+ * GLiNER Decoder
  * Converts ONNX model output logits to entity spans.
- * Adapted from GLiNER.js TokenDecoder (Apache-2.0 / MIT)
- *
- * Output tensor shape: [batchSize, inputLength, numEntities, 3]
- * where the last dim is [start, end, inside] logits.
+ * Supports both token-level and span-level (markerV0) modes.
+ * Adapted from GLiNER.js TokenDecoder / SpanDecoder (Apache-2.0 / MIT)
  */
 
 import type { GLiNEREntity } from './types';
@@ -13,34 +11,114 @@ function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
 }
 
+// =====================================================================
+// Span-level decoder (markerV0) — used by gliner_multi-v2.1
+// Output tensor shape: [batchSize, numSpans, numEntities]
+// =====================================================================
+
+interface SpanDecodeOptions {
+  logits: Float32Array | number[];
+  batchSize: number;
+  numSpans: number;
+  numEntities: number;
+  entities: string[];
+  texts: string[];
+  batchWordsStartIdx: number[][];
+  batchWordsEndIdx: number[][];
+  spanIdx: number[][][];
+  spanMask: number[][];
+  threshold?: number;
+}
+
+/**
+ * Decode span-level model output into entity spans.
+ */
+export function decodeSpanLevel(opts: SpanDecodeOptions): GLiNEREntity[][] {
+  const {
+    logits, batchSize, numSpans, numEntities,
+    entities, texts, batchWordsStartIdx, batchWordsEndIdx,
+    spanIdx, spanMask, threshold = 0.4,
+  } = opts;
+  const batchStride = numSpans * numEntities;
+  const results: GLiNEREntity[][] = [];
+
+  for (let b = 0; b < batchSize; b++) {
+    const candidates: GLiNEREntity[] = [];
+    const text = texts[b];
+    const batchOffset = b * batchStride;
+
+    for (let s = 0; s < numSpans; s++) {
+      if (spanMask[b][s] === 0) continue;
+
+      const [startWord, endWord] = spanIdx[b][s];
+
+      // Find best entity for this span
+      let bestScore = -Infinity;
+      let bestEntity = -1;
+
+      for (let e = 0; e < numEntities; e++) {
+        const logit = Number(logits[batchOffset + s * numEntities + e]);
+        const score = sigmoid(logit);
+        if (score > bestScore) {
+          bestScore = score;
+          bestEntity = e;
+        }
+      }
+
+      if (bestScore > threshold && bestEntity >= 0) {
+        const charStart = batchWordsStartIdx[b][startWord];
+        const charEnd = batchWordsEndIdx[b][endWord];
+
+        if (charStart === undefined || charEnd === undefined) continue;
+
+        const entityText = text.slice(charStart, charEnd);
+
+        candidates.push({
+          text: entityText,
+          label: entities[bestEntity],
+          start: charStart,
+          end: charEnd,
+          score: bestScore,
+        });
+      }
+    }
+
+    results.push(greedySearch(candidates));
+  }
+
+  return results;
+}
+
+// =====================================================================
+// Token-level decoder — used by older models (gliner-pii-edge-v1.0)
+// Output tensor shape: [batchSize, inputLength, numEntities, 3]
+// where the last dim is [start, end, inside] logits.
+// =====================================================================
+
+interface TokenDecodeOptions {
+  logits: Float32Array | number[];
+  batchSize: number;
+  inputLength: number;
+  numEntities: number;
+  entities: string[];
+  texts: string[];
+  batchWordsStartIdx: number[][];
+  batchWordsEndIdx: number[][];
+  batchTokens: string[][];
+  wordsMask: number[][];
+  threshold?: number;
+}
+
 /**
  * Decode token-level model output into entity spans.
- *
- * @param logits - Raw model output, shape [batch, words, entities, 3] flattened
- * @param batchSize - Number of texts in the batch
- * @param inputLength - Number of word positions in output
- * @param numEntities - Number of entity types
- * @param entities - Entity label strings
- * @param texts - Original input texts
- * @param batchWordsStartIdx - Character start indices per word per batch item
- * @param batchWordsEndIdx - Character end indices per word per batch item
- * @param batchTokens - Words per batch item
- * @param wordsMask - Words mask used during processing
- * @param threshold - Confidence threshold (default: 0.3)
  */
-export function decodeTokenLevel(
-  logits: Float32Array | number[],
-  batchSize: number,
-  inputLength: number,
-  numEntities: number,
-  entities: string[],
-  texts: string[],
-  batchWordsStartIdx: number[][],
-  batchWordsEndIdx: number[][],
-  batchTokens: string[][],
-  wordsMask: number[][],
-  threshold: number = 0.3,
-): GLiNEREntity[][] {
+export function decodeTokenLevel(opts: TokenDecodeOptions): GLiNEREntity[][] {
+  const {
+    logits, batchSize, inputLength, numEntities,
+    entities, texts, batchWordsStartIdx, batchWordsEndIdx,
+    batchTokens: _batchTokens, wordsMask, threshold = 0.3,
+  } = opts;
+
   // Strides for [batch, inputLength, numEntities, 3] layout
   const numPositions = 3;
   const entityStride = numPositions;                          // stride to next entity
@@ -58,9 +136,9 @@ export function decodeTokenLevel(
     // Build a sequential mapping from output position → text word index.
     const outputPosToTextWord = new Map<number, number>();
     let outputIdx = 0;
-    for (let t = 0; t < mask.length; t++) {
-      if (mask[t] > 0) {
-        outputPosToTextWord.set(outputIdx, mask[t] - 1); // 0-indexed text word
+    for (const [, val] of mask.entries()) {
+      if (val > 0) {
+        outputPosToTextWord.set(outputIdx, val - 1); // 0-indexed text word
         outputIdx++;
       }
     }

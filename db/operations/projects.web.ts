@@ -18,6 +18,7 @@ function toProject(row: typeof schema.projects.$inferSelect, recordingCount?: nu
     llmProvider: row.llmProvider as Project['llmProvider'],
     llmModel: row.llmModel,
     llmPrompt: row.llmPrompt,
+    enableLlm: (row as any).enableLlm ?? true,
     enableAnonymization: row.enableAnonymization,
     customFields: row.customFields ? JSON.parse(row.customFields) : [],
     sensitiveWords: row.sensitiveWords ? JSON.parse(row.sensitiveWords) : [],
@@ -63,6 +64,7 @@ export async function createProject(data: {
   llmProvider: string;
   llmModel: string;
   llmPrompt: string;
+  enableLlm?: boolean;
   enableAnonymization?: boolean;
   customFields?: any[];
   sensitiveWords?: string[];
@@ -77,6 +79,7 @@ export async function createProject(data: {
     llmProvider: data.llmProvider,
     llmModel: data.llmModel,
     llmPrompt: data.llmPrompt,
+    enableLlm: data.enableLlm ?? true,
     enableAnonymization: data.enableAnonymization ?? true,
     customFields: data.customFields ? JSON.stringify(data.customFields) : null,
     sensitiveWords: data.sensitiveWords ? JSON.stringify(data.sensitiveWords) : null,
@@ -98,6 +101,7 @@ export async function updateProject(
     llmProvider: string;
     llmModel: string;
     llmPrompt: string;
+    enableLlm: boolean;
     enableAnonymization: boolean;
     customFields: any[];
     sensitiveWords: string[];
@@ -110,6 +114,7 @@ export async function updateProject(
   if (data.llmProvider !== undefined) updates.llmProvider = data.llmProvider;
   if (data.llmModel !== undefined) updates.llmModel = data.llmModel;
   if (data.llmPrompt !== undefined) updates.llmPrompt = data.llmPrompt;
+  if (data.enableLlm !== undefined) updates.enableLlm = data.enableLlm;
   if (data.enableAnonymization !== undefined) updates.enableAnonymization = data.enableAnonymization;
   if (data.customFields !== undefined) updates.customFields = JSON.stringify(data.customFields);
   if (data.sensitiveWords !== undefined) updates.sensitiveWords = JSON.stringify(data.sensitiveWords);

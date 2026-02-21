@@ -112,7 +112,7 @@ async function callMistral(prompt: string, model: string, apiKey?: string): Prom
 
 export const AVAILABLE_MODELS = {
   openai: ['gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
-  gemini: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'],
+  gemini: ['gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
   mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'],
 };
 

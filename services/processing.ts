@@ -78,11 +78,11 @@ export async function runProcessingPipeline(
       console.log(`[Pipeline] Transcription done: ${transcriptionData.segments.length} segments`);
     }
 
-    // Step 2: Anonymize (if enabled)
+    // Step 2: Anonymize (if enabled AND LLM is enabled)
     let anonymizedText: string | undefined;
     let piiMappings: Record<string, string> | undefined;
 
-    if (project.enableAnonymization) {
+    if (project.enableLlm && project.enableAnonymization) {
       console.log('[Pipeline] Step 2/3: Anonymization');
       await updateRecording(recordingId, { status: 'anonymizing' });
 
@@ -100,31 +100,38 @@ export async function runProcessingPipeline(
       console.log('[Pipeline] Step 2/3: Anonymization skipped');
     }
 
-    // Step 3: LLM Processing
-    console.log(`[Pipeline] Step 3/3: LLM (${project.llmProvider}/${project.llmModel})`);
-    await updateRecording(recordingId, { status: 'processing' });
+    // Step 3: LLM Processing (if enabled)
+    if (project.enableLlm) {
+      console.log(`[Pipeline] Step 3/3: LLM (${project.llmProvider}/${project.llmModel})`);
+      await updateRecording(recordingId, { status: 'processing' });
 
-    const textToProcess = project.enableAnonymization && anonymizedText
-      ? anonymizedText
-      : transcriptionText;
+      const textToProcess = project.enableAnonymization && anonymizedText
+        ? anonymizedText
+        : transcriptionText;
 
-    const llmOutput = await processWithLLM(
-      textToProcess,
-      project.llmProvider,
-      project.llmModel,
-      project.llmPrompt,
-      apiKeysRecord
-    );
+      const llmOutput = await processWithLLM(
+        textToProcess,
+        project.llmProvider,
+        project.llmModel,
+        project.llmPrompt,
+        apiKeysRecord
+      );
 
-    let finalOutput = llmOutput;
-    if (project.enableAnonymization && piiMappings) {
-      finalOutput = reversePIIMappings(llmOutput, piiMappings);
+      let finalOutput = llmOutput;
+      if (project.enableAnonymization && piiMappings) {
+        finalOutput = reversePIIMappings(llmOutput, piiMappings);
+      }
+
+      await updateRecording(recordingId, {
+        llmOutput: finalOutput,
+        status: 'done',
+      });
+    } else {
+      console.log('[Pipeline] Step 3/3: LLM skipped (disabled for project)');
+      await updateRecording(recordingId, {
+        status: 'done',
+      });
     }
-
-    await updateRecording(recordingId, {
-      llmOutput: finalOutput,
-      status: 'done',
-    });
 
     const totalMs = Date.now() - pipelineStart;
     console.log(`[Pipeline] Completed in ${totalMs}ms`);

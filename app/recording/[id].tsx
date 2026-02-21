@@ -190,24 +190,26 @@ export default function RecordingDetailScreen() {
   };
 
   const getStatusColor = (status: Recording['status']) => {
-    const statusColors = {
+    const statusColors: Record<Recording['status'], string> = {
       pending: colors.statusPending,
       transcribing: colors.statusTranscribing,
       anonymizing: colors.statusAnonymizing,
       processing: colors.statusProcessing,
       done: colors.statusDone,
+      stale: colors.statusStale,
       error: colors.statusError,
     };
     return statusColors[status];
   };
 
   const getStatusLabel = (status: Recording['status']) => {
-    const labels = {
+    const labels: Record<Recording['status'], string> = {
       pending: 'Pending',
       transcribing: 'Transcribing',
       anonymizing: 'Anonymizing',
       processing: 'Processing',
       done: 'Done',
+      stale: 'Stale',
       error: 'Error',
     };
     return labels[status];

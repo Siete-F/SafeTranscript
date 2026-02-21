@@ -12,7 +12,7 @@ export interface GLiNEREntity {
 }
 
 export interface GLiNERConfig {
-  spanMode: 'token_level' | 'span_level';
+  spanMode: 'token_level' | 'span_level' | 'markerV0';
   maxWidth: number;
   maxLen: number;
   maxTypes: number;
@@ -37,6 +37,10 @@ export interface ProcessorOutput {
   batchTokens: string[][];
   batchWordsStartIdx: number[][];
   batchWordsEndIdx: number[][];
+  /** Span mode only: candidate span indices [batch, numSpans, 2] */
+  spanIdx?: number[][][];
+  /** Span mode only: which spans are valid [batch, numSpans] */
+  spanMask?: number[][];
 }
 
 export interface ModelFiles {

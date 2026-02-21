@@ -24,8 +24,9 @@ function configToProject(
     llmProvider: config.llmProvider as Project['llmProvider'],
     llmModel: config.llmModel,
     llmPrompt: config.llmPrompt,
+    enableLlm: config.enableLlm ?? true,
     enableAnonymization: config.enableAnonymization,
-    customFields: config.customFields ?? [],
+    customFields: (config.customFields ?? []) as Project['customFields'],
     sensitiveWords: config.sensitiveWords ?? [],
     recordingCount,
     createdAt: config.createdAt,
@@ -66,6 +67,7 @@ export async function createProject(data: {
   llmProvider: string;
   llmModel: string;
   llmPrompt: string;
+  enableLlm?: boolean;
   enableAnonymization?: boolean;
   customFields?: any[];
   sensitiveWords?: string[];
@@ -87,6 +89,7 @@ export async function createProject(data: {
     llmProvider: data.llmProvider,
     llmModel: data.llmModel,
     llmPrompt: data.llmPrompt,
+    enableLlm: data.enableLlm ?? true,
     enableAnonymization: data.enableAnonymization ?? true,
     customFields: data.customFields ?? [],
     sensitiveWords: data.sensitiveWords ?? [],
@@ -107,6 +110,7 @@ export async function updateProject(
     llmProvider: string;
     llmModel: string;
     llmPrompt: string;
+    enableLlm: boolean;
     enableAnonymization: boolean;
     customFields: any[];
     sensitiveWords: string[];
@@ -125,6 +129,7 @@ export async function updateProject(
   if (data.llmProvider !== undefined) updated.llmProvider = data.llmProvider;
   if (data.llmModel !== undefined) updated.llmModel = data.llmModel;
   if (data.llmPrompt !== undefined) updated.llmPrompt = data.llmPrompt;
+  if (data.enableLlm !== undefined) updated.enableLlm = data.enableLlm;
   if (data.enableAnonymization !== undefined) updated.enableAnonymization = data.enableAnonymization;
   if (data.customFields !== undefined) updated.customFields = data.customFields;
   if (data.sensitiveWords !== undefined) updated.sensitiveWords = data.sensitiveWords;

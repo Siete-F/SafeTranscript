@@ -28,14 +28,10 @@ export function IconSymbol({
   testID?: any;
   accessibilityLabel?: any;
 }) {
+  const extraProps = { onPress, onClick, onMouseOver, onMouseLeave, testID, accessibilityLabel } as any;
   return (
     <SymbolView
-      onPress={onPress}
-      onClick={onClick}
-      onMouseOver={onMouseOver}
-      onMouseLeave={onMouseLeave}
-      testID={testID}
-      accessibilityLabel={accessibilityLabel}
+      {...extraProps}
       weight={weight}
       tintColor={color}
       resizeMode="scaleAspectFit"

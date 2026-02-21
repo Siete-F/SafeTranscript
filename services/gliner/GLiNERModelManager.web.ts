@@ -1,9 +1,11 @@
 /**
  * GLiNER Model Manager — Web Platform
  * Downloads and stores model files using IndexedDB for persistence.
+ * Supports multiple model variants (INT8, FP16).
  */
 
-import { MODEL_FILES, MODEL_SIZE_MB, IDB_DB_NAME, IDB_STORE_NAME, IDB_DB_VERSION } from './config';
+import { MODEL_VARIANTS, DEFAULT_VARIANT, IDB_DB_NAME, IDB_STORE_NAME, IDB_DB_VERSION } from './config';
+import type { ModelVariantId } from './config';
 
 // --- IndexedDB Helpers ---
 
@@ -17,7 +19,7 @@ function openDB(): Promise<IDBDatabase> {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => reject(new Error(String(request.error)));
   });
 }
 
@@ -27,7 +29,7 @@ function idbGet(db: IDBDatabase, key: string): Promise<any> {
     const store = tx.objectStore(IDB_STORE_NAME);
     const request = store.get(key);
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => reject(new Error(String(request.error)));
   });
 }
 
@@ -37,7 +39,7 @@ function idbPut(db: IDBDatabase, key: string, value: any): Promise<void> {
     const store = tx.objectStore(IDB_STORE_NAME);
     const request = store.put(value, key);
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    request.onerror = () => reject(new Error(String(request.error)));
   });
 }
 
@@ -47,11 +49,30 @@ function idbDelete(db: IDBDatabase, key: string): Promise<void> {
     const store = tx.objectStore(IDB_STORE_NAME);
     const request = store.delete(key);
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    request.onerror = () => reject(new Error(String(request.error)));
   });
 }
 
 // --- Public API ---
+
+/**
+ * Get the currently downloaded variant, or null if none.
+ */
+export async function getDownloadedVariant(): Promise<ModelVariantId | null> {
+  try {
+    const db = await openDB();
+    const variant = await idbGet(db, 'variant');
+    db.close();
+    if (variant && MODEL_VARIANTS[variant as ModelVariantId]) {
+      return variant as ModelVariantId;
+    }
+    // Legacy: check if old model exists (no variant marker)
+    const model = await checkGLiNERModelExists();
+    return model ? DEFAULT_VARIANT : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Check if all model files are downloaded and stored.
@@ -73,43 +94,49 @@ export async function checkGLiNERModelExists(): Promise<boolean> {
 /**
  * Download model files from HuggingFace and store in IndexedDB.
  * @param onProgress - Progress callback (0 to 1)
+ * @param variantId - Which model variant to download (default: multi_int8)
  */
 export async function downloadGLiNERModel(
   onProgress: (progress: number) => void,
+  variantId: ModelVariantId = DEFAULT_VARIANT,
 ): Promise<void> {
+  const variant = MODEL_VARIANTS[variantId];
+  if (!variant) throw new Error(`Unknown model variant: ${variantId}`);
+
   const db = await openDB();
 
   try {
     // Download config first (smallest)
     onProgress(0);
     console.log('[GLiNERModelManager] Downloading gliner_config.json...');
-    const configRes = await fetch(MODEL_FILES.glinerConfig);
+    const configRes = await fetch(variant.urls.glinerConfig);
     if (!configRes.ok) throw new Error(`Failed to download config: ${configRes.status}`);
     const configJson = await configRes.json();
     await idbPut(db, 'glinerConfig', configJson);
     onProgress(0.02);
 
-    // Download tokenizer.json (~3.5MB)
+    // Download tokenizer.json
     console.log('[GLiNERModelManager] Downloading tokenizer.json...');
-    const tokenizerRes = await fetch(MODEL_FILES.tokenizer);
+    const tokenizerRes = await fetch(variant.urls.tokenizer);
     if (!tokenizerRes.ok) throw new Error(`Failed to download tokenizer: ${tokenizerRes.status}`);
     const tokenizerJson = await tokenizerRes.json();
     await idbPut(db, 'tokenizer', tokenizerJson);
     onProgress(0.1);
 
-    // Download model.onnx (~46MB) with progress tracking
-    console.log('[GLiNERModelManager] Downloading model_quint8.onnx...');
-    const modelRes = await fetch(MODEL_FILES.model);
+    // Download model ONNX with progress tracking
+    console.log(`[GLiNERModelManager] Downloading ${variant.name} (${variant.sizeMB} MB)...`);
+    const modelRes = await fetch(variant.urls.model);
     if (!modelRes.ok) throw new Error(`Failed to download model: ${modelRes.status}`);
 
     const contentLength = modelRes.headers.get('content-length');
-    const totalBytes = contentLength ? parseInt(contentLength, 10) : MODEL_SIZE_MB * 1024 * 1024;
+    const totalBytes = contentLength ? Number.parseInt(contentLength, 10) : variant.sizeMB * 1024 * 1024;
 
     const reader = modelRes.body?.getReader();
     if (!reader) {
       // Fallback: download all at once
       const buffer = await modelRes.arrayBuffer();
       await idbPut(db, 'model', buffer);
+      await idbPut(db, 'variant', variantId);
       onProgress(1);
       return;
     }
@@ -137,8 +164,9 @@ export async function downloadGLiNERModel(
     }
 
     await idbPut(db, 'model', modelBuffer.buffer);
+    await idbPut(db, 'variant', variantId);
     onProgress(1);
-    console.log('[GLiNERModelManager] All files downloaded and stored.');
+    console.log(`[GLiNERModelManager] ${variant.name} downloaded and stored.`);
   } finally {
     db.close();
   }
@@ -153,6 +181,7 @@ export async function deleteGLiNERModel(): Promise<void> {
     await idbDelete(db, 'model');
     await idbDelete(db, 'tokenizer');
     await idbDelete(db, 'glinerConfig');
+    await idbDelete(db, 'variant');
     db.close();
     console.log('[GLiNERModelManager] Model files deleted.');
   } catch (error) {

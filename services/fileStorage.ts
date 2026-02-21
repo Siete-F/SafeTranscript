@@ -158,6 +158,7 @@ export interface ProjectConfig {
   llmProvider: string;
   llmModel: string;
   llmPrompt: string;
+  enableLlm: boolean;
   enableAnonymization: boolean;
   customFields: { name: string; type: string }[];
   sensitiveWords: string[];
