@@ -14,10 +14,12 @@
       "autoIncrement": true,
       "android": {
         "buildType": "apk"
-      }
+      },
+      "installCommand": "npm install"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "installCommand": "npm install"
     }
   }
 }
