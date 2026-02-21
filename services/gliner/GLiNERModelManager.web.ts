@@ -116,15 +116,16 @@ export async function downloadGLiNERModel(
 
     const chunks: Uint8Array[] = [];
     let receivedBytes = 0;
+    let readResult = await reader.read();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    while (!readResult.done) {
+      const value = readResult.value;
       chunks.push(value);
       receivedBytes += value.length;
       // Model download is 10%-100% of total progress
       const modelProgress = receivedBytes / totalBytes;
       onProgress(0.1 + modelProgress * 0.9);
+      readResult = await reader.read();
     }
 
     // Combine chunks into a single ArrayBuffer

@@ -8,8 +8,8 @@ import type { ProcessorOutput } from './types';
 import { encodeWord, getSpecialTokenId, getClsTokenId } from './tokenizer';
 
 /** Split text into words with character offsets */
-function splitWords(text: string): Array<[string, number, number]> {
-  const words: Array<[string, number, number]> = [];
+function splitWords(text: string): [string, number, number][] {
+  const words: [string, number, number][] = [];
   const regex = /\w+(?:[-_]\w+)*|\S/g;
   let match;
   while ((match = regex.exec(text)) !== null) {

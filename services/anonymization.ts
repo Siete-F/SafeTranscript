@@ -23,7 +23,7 @@ const PII_PATTERNS = {
   address: /\b\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Circle|Cir|Terrace|Ter|Way|Park|Parkway|Pkwy|Place|Pl|Square|Sq|Trail|Trl|Park|straat|laan|weg|plein|gracht|kade|singel)\b/gi,
   bankAccount: /\b\d{9,17}\b(?=.*account|.*account)/gi,
   healthInsuranceId: /\b[A-Z]{2}\d{10}\b/g,
-  dateOfBirth: /\b(?:0[1-9]|1[0-2])[-\/](?:0[1-9]|[12]\d|3[01])[-\/](?:19|20)\d{2}\b/g,
+  dateOfBirth: /\b(?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12]\d|3[01])[-/](?:19|20)\d{2}\b/g,
   ipAddress: /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/g,
 };
 
@@ -31,11 +31,11 @@ const PII_PATTERNS = {
  * Context-based PII patterns: match numbers preceded by identifying keywords.
  * These catch things like "BSN is 1234567" or "telefoonnummer is 06123456789"
  */
-const CONTEXT_PII_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
+const CONTEXT_PII_PATTERNS: { type: string; pattern: RegExp }[] = [
   // BSN / social security / sofi preceded by keyword
   { type: 'ssn', pattern: /(?:BSN|bsn|sofi|burgerservicenummer|social\s+security)\s+(?:is|:)?\s*(\d{7,9})/gi },
   // Phone/tel preceded by keyword (any digit sequence 7-15 chars)
-  { type: 'phone', pattern: /(?:telefoon(?:nummer)?|phone\s*(?:number)?|tel|mobiel|mobile|nummer)\s+(?:is|:)?\s*(\+?\d[\d\s\-\.]{6,17}\d)/gi },
+  { type: 'phone', pattern: /(?:telefoon(?:nummer)?|phone\s*(?:number)?|tel|mobiel|mobile|nummer)\s+(?:is|:)?\s*(\+?\d[\d\s\-.]{6,17}\d)/gi },
   // Account/IBAN preceded by keyword
   { type: 'bankAccount', pattern: /(?:rekening(?:nummer)?|account\s*(?:number)?|IBAN)\s+(?:is|:)?\s*([A-Z]{2}\d{2}\s?[A-Z]{4}\s?[\d\s]{8,26}|\d{9,17})/gi },
 ];

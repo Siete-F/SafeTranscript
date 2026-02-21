@@ -65,8 +65,8 @@ export function decodeTokenLevel(
       }
     }
 
-    const starts: Array<{ word: number; entity: number; score: number }> = [];
-    const ends: Array<{ word: number; entity: number; score: number }> = [];
+    const starts: { word: number; entity: number; score: number }[] = [];
+    const ends: { word: number; entity: number; score: number }[] = [];
     const insideMap = new Map<string, number>(); // "word-entity" -> score
 
     for (let w = 0; w < inputLength; w++) {

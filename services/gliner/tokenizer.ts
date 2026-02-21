@@ -217,24 +217,28 @@ class BPETokenizer {
     return tokens;
   }
 
+  private findBestMergePair(symbols: string[]): string | null {
+    let bestPair: string | null = null;
+    let bestRank = Infinity;
+
+    for (let i = 0; i < symbols.length - 1; i++) {
+      const pair = `${symbols[i]} ${symbols[i + 1]}`;
+      const rank = this.mergeRanks.get(pair);
+      if (rank !== undefined && rank < bestRank) {
+        bestPair = pair;
+        bestRank = rank;
+      }
+    }
+
+    return bestPair;
+  }
+
   private applyBPE(symbols: string[]): string[] {
     if (symbols.length <= 1) return symbols;
 
-    while (true) {
-      // Find the best merge (lowest rank)
-      let bestPair: string | null = null;
-      let bestRank = Infinity;
+    let bestPair = this.findBestMergePair(symbols);
 
-      for (let i = 0; i < symbols.length - 1; i++) {
-        const pair = `${symbols[i]} ${symbols[i + 1]}`;
-        const rank = this.mergeRanks.get(pair);
-        if (rank !== undefined && rank < bestRank) {
-          bestPair = pair;
-          bestRank = rank;
-        }
-      }
-
-      if (bestPair === null) break;
+    while (bestPair !== null) {
 
       // Apply the merge
       const [a, b] = bestPair.split(' ');
@@ -253,6 +257,7 @@ class BPETokenizer {
       }
 
       symbols = newSymbols;
+      bestPair = this.findBestMergePair(symbols);
       if (symbols.length <= 1) break;
     }
 
