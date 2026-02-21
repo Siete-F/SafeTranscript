@@ -70,6 +70,7 @@ export async function initializeDatabase() {
       llm_provider TEXT NOT NULL,
       llm_model TEXT NOT NULL,
       llm_prompt TEXT NOT NULL,
+      enable_llm INTEGER NOT NULL DEFAULT 1,
       enable_anonymization INTEGER NOT NULL DEFAULT 1,
       custom_fields TEXT,
       sensitive_words TEXT,
@@ -108,6 +109,19 @@ export async function initializeDatabase() {
       value TEXT NOT NULL
     );
   `);
+
+  // Migrate: add enable_llm column if missing (for existing databases)
+  try {
+    const tableInfo = _sqlDb.exec('PRAGMA table_info(projects)');
+    if (tableInfo.length > 0) {
+      const columns = tableInfo[0].values.map((row: any) => row[1]);
+      if (!columns.includes('enable_llm')) {
+        _sqlDb.run('ALTER TABLE projects ADD COLUMN enable_llm INTEGER NOT NULL DEFAULT 1');
+      }
+    }
+  } catch (e) {
+    console.warn('[DB Web] Migration warning:', e);
+  }
 
   _drizzleDb = drizzle(_sqlDb, { schema });
 

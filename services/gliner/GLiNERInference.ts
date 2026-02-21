@@ -158,7 +158,7 @@ async function runSpanInference(
     spanIdxFlat[s * 2 + 1] = BigInt(batch.spanIdx![0][s][1]);
   }
   feeds.span_idx = new _ort.Tensor('int64', spanIdxFlat, [batchSize, numSpans, 2]);
-  feeds.span_mask = new _ort.Tensor('int64', BigInt64Array.from(batch.spanMask![0].map(BigInt)), [batchSize, numSpans]);
+  feeds.span_mask = new _ort.Tensor('bool', Uint8Array.from(batch.spanMask![0]), [batchSize, numSpans]);
 
   console.log(`[GLiNER] Running span inference on ${text.length} chars, ${labels.length} labels, ${numSpans} spans...`);
   const results = await _session.run(feeds);

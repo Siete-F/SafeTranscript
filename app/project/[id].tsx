@@ -20,7 +20,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors, commonStyles } from '@/styles/commonStyles';
 import { Project, Recording, LLM_PROVIDERS } from '@/types';
-import { getProjectById, updateProject } from '@/db/operations/projects';
+import { getProjectById, updateProject, deleteProject } from '@/db/operations/projects';
 import { getRecordingsByProject, deleteRecording, updateRecording } from '@/db/operations/recordings';
 import { exportProjectCSV } from '@/db/operations/export';
 import { getAudioFileUri } from '@/services/audioStorage';
@@ -68,6 +68,10 @@ export default function ProjectDetailScreen() {
   // Reprocess prompt state
   const [reprocessVisible, setReprocessVisible] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+
+  // Delete project state
+  const [deleteProjectVisible, setDeleteProjectVisible] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(false);
 
   const audioPlayer = useAudioPlayer(playableAudioUrl);
   const playerStatus = useAudioPlayerStatus(audioPlayer);
@@ -237,6 +241,119 @@ export default function ProjectDetailScreen() {
         message: error instanceof Error ? error.message : 'Failed to export CSV',
         type: 'error',
       });
+    }
+  };
+
+  // ---- Config modal handlers ----
+
+  const openConfig = () => {
+    if (!project) return;
+    setConfigName(project.name);
+    setConfigDescription(project.description || '');
+    setConfigLlmProvider(project.llmProvider);
+    setConfigLlmModel(project.llmModel);
+    setConfigLlmPrompt(project.llmPrompt);
+    setConfigEnableLlm(project.enableLlm);
+    setConfigEnableAnon(project.enableAnonymization);
+    setConfigSensitiveWords((project.sensitiveWords || []).join(', '));
+    setConfigVisible(true);
+  };
+
+  const handleSaveConfig = async () => {
+    if (!project) return;
+    if (!configName.trim()) {
+      setModal({ visible: true, title: 'Validation Error', message: 'Project name is required.', type: 'error' });
+      return;
+    }
+    setConfigSaving(true);
+    try {
+      const promptChanged = configLlmPrompt !== project.llmPrompt;
+      const llmToggleChanged = configEnableLlm !== project.enableLlm;
+      const providerChanged = configLlmProvider !== project.llmProvider;
+      const modelChanged = configLlmModel !== project.llmModel;
+
+      const sensitiveWords = configSensitiveWords
+        .split(',')
+        .map((w) => w.trim())
+        .filter((w) => w.length > 0);
+
+      await updateProject(project.id, {
+        name: configName,
+        description: configDescription || undefined,
+        llmProvider: configLlmProvider,
+        llmModel: configLlmModel,
+        llmPrompt: configLlmPrompt,
+        enableLlm: configEnableLlm,
+        enableAnonymization: configEnableAnon,
+        sensitiveWords,
+      });
+
+      // If LLM prompt/provider/model changed, mark done recordings as stale
+      if (promptChanged || llmToggleChanged || providerChanged || modelChanged) {
+        const doneRecordings = recordings.filter((r) => r.status === 'done');
+        for (const rec of doneRecordings) {
+          await updateRecording(rec.id, { status: 'stale' });
+        }
+        await loadRecordings();
+      }
+
+      await loadProject();
+      setConfigVisible(false);
+
+      // If prompt changed and there are affected recordings, offer reprocessing
+      if ((promptChanged || llmToggleChanged || providerChanged || modelChanged) && recordings.some((r) => r.status === 'done' || r.status === 'stale')) {
+        setReprocessVisible(true);
+      } else {
+        setModal({ visible: true, title: 'Saved', message: 'Project settings updated.', type: 'success' });
+      }
+    } catch (error) {
+      console.error('[ProjectDetailScreen] Error saving config:', error);
+      setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to save settings', type: 'error' });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const handleReprocessAll = async () => {
+    setReprocessing(true);
+    try {
+      const staleRecordings = recordings.filter((r) => r.status === 'stale');
+      for (const rec of staleRecordings) {
+        try {
+          await runProcessingPipeline(rec.id, id!, { skipTranscription: true });
+        } catch (e) {
+          console.error(`[ProjectDetailScreen] Reprocess error for ${rec.id}:`, e);
+        }
+      }
+      await loadRecordings();
+      setReprocessVisible(false);
+      setModal({ visible: true, title: 'Done', message: `Reprocessed ${staleRecordings.length} recording(s).`, type: 'success' });
+    } catch (error) {
+      setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to reprocess', type: 'error' });
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    setDeletingProject(true);
+    try {
+      // Delete all recordings first
+      for (const rec of recordings) {
+        try {
+          await deleteRecording(rec.id);
+        } catch (e) {
+          console.error(`[ProjectDetailScreen] Error deleting recording ${rec.id}:`, e);
+        }
+      }
+      await deleteProject(id!);
+      setDeleteProjectVisible(false);
+      setConfigVisible(false);
+      router.replace('/');
+    } catch (error) {
+      console.error('[ProjectDetailScreen] Error deleting project:', error);
+      setDeletingProject(false);
+      setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete project', type: 'error' });
     }
   };
 
@@ -503,6 +620,16 @@ export default function ProjectDetailScreen() {
           headerShown: true,
           title: projectName,
           headerBackTitle: 'Back',
+          headerRight: () => (
+            <Pressable onPress={openConfig} style={{ padding: 8 }}>
+              <IconSymbol
+                ios_icon_name="gearshape.fill"
+                android_material_icon_name="settings"
+                size={22}
+                color={colors.primary}
+              />
+            </Pressable>
+          ),
         }}
       />
 
@@ -565,6 +692,200 @@ export default function ProjectDetailScreen() {
         onConfirm={modal.type === 'confirm' ? confirmDeleteRecording : undefined}
         confirmText={modal.type === 'confirm' ? 'Delete' : 'OK'}
       />
+
+      {/* Reprocess confirmation modal */}
+      <Modal
+        visible={reprocessVisible}
+        title="Reprocess Recordings?"
+        message="LLM settings have changed. Would you like to reprocess all affected recordings with the new settings?"
+        type="confirm"
+        onClose={() => setReprocessVisible(false)}
+        onConfirm={handleReprocessAll}
+        confirmText={reprocessing ? 'Reprocessing...' : 'Reprocess All'}
+        cancelText="Skip"
+      />
+
+      {/* Delete project confirmation modal */}
+      <Modal
+        visible={deleteProjectVisible}
+        title="Delete Project"
+        message={`Are you sure you want to delete "${project?.name}"? This will permanently remove the project and all ${recordings.length} recording(s). This action cannot be undone.`}
+        type="confirm"
+        onClose={() => { if (!deletingProject) setDeleteProjectVisible(false); }}
+        onConfirm={handleDeleteProject}
+        confirmText={deletingProject ? 'Deleting...' : 'Delete Forever'}
+        cancelText="Cancel"
+      />
+
+      {/* Project config modal */}
+      {configVisible && (
+        <View style={StyleSheet.absoluteFill}>
+          <View style={configStyles.overlay}>
+            <SafeAreaView style={configStyles.container} edges={['top', 'bottom']}>
+              <View style={configStyles.header}>
+                <TouchableOpacity onPress={() => setConfigVisible(false)} style={configStyles.headerButton}>
+                  <Text style={configStyles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <Text style={configStyles.headerTitle}>Project Settings</Text>
+                <TouchableOpacity
+                  onPress={handleSaveConfig}
+                  style={configStyles.headerButton}
+                  disabled={configSaving}
+                >
+                  <Text style={[configStyles.saveText, configSaving && { opacity: 0.5 }]}>
+                    {configSaving ? 'Saving...' : 'Save'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={configStyles.body} contentContainerStyle={configStyles.bodyContent}>
+                {/* Name */}
+                <Text style={configStyles.label}>Project Name</Text>
+                <TextInput
+                  style={configStyles.input}
+                  value={configName}
+                  onChangeText={setConfigName}
+                  placeholder="Enter project name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                {/* Description */}
+                <Text style={configStyles.label}>Description</Text>
+                <TextInput
+                  style={[configStyles.input, configStyles.multiline]}
+                  value={configDescription}
+                  onChangeText={setConfigDescription}
+                  placeholder="Optional description"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                />
+
+                {/* Enable LLM */}
+                <View style={configStyles.switchRow}>
+                  <Text style={configStyles.label}>Enable LLM Processing</Text>
+                  <Switch
+                    value={configEnableLlm}
+                    onValueChange={setConfigEnableLlm}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                  />
+                </View>
+                <Text style={configStyles.hint}>
+                  When disabled, recordings are transcribed only — no anonymization or LLM analysis.
+                </Text>
+
+                {configEnableLlm && (
+                  <>
+                    {/* LLM Provider */}
+                    <Text style={configStyles.label}>LLM Provider</Text>
+                    <View style={configStyles.providerRow}>
+                      {(Object.keys(LLM_PROVIDERS) as Array<keyof typeof LLM_PROVIDERS>).map((key) => (
+                        <TouchableOpacity
+                          key={key}
+                          style={[
+                            configStyles.providerChip,
+                            configLlmProvider === key && configStyles.providerChipActive,
+                          ]}
+                          onPress={() => {
+                            setConfigLlmProvider(key as 'openai' | 'gemini' | 'mistral');
+                            setConfigLlmModel(LLM_PROVIDERS[key].models[0].id);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              configStyles.providerChipText,
+                              configLlmProvider === key && configStyles.providerChipTextActive,
+                            ]}
+                          >
+                            {LLM_PROVIDERS[key].name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {/* LLM Model */}
+                    <Text style={configStyles.label}>Model</Text>
+                    <View style={configStyles.providerRow}>
+                      {LLM_PROVIDERS[configLlmProvider].models.map((m) => (
+                        <TouchableOpacity
+                          key={m.id}
+                          style={[
+                            configStyles.providerChip,
+                            configLlmModel === m.id && configStyles.providerChipActive,
+                          ]}
+                          onPress={() => setConfigLlmModel(m.id)}
+                        >
+                          <Text
+                            style={[
+                              configStyles.providerChipText,
+                              configLlmModel === m.id && configStyles.providerChipTextActive,
+                            ]}
+                          >
+                            {m.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {/* LLM Prompt */}
+                    <Text style={configStyles.label}>LLM Prompt</Text>
+                    <TextInput
+                      style={[configStyles.input, configStyles.multiline, { minHeight: 100 }]}
+                      value={configLlmPrompt}
+                      onChangeText={setConfigLlmPrompt}
+                      placeholder="Enter prompt for LLM processing"
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      numberOfLines={5}
+                    />
+
+                    {/* Enable Anonymization */}
+                    <View style={configStyles.switchRow}>
+                      <Text style={configStyles.label}>Enable Anonymization</Text>
+                      <Switch
+                        value={configEnableAnon}
+                        onValueChange={setConfigEnableAnon}
+                        trackColor={{ false: colors.border, true: colors.primary }}
+                      />
+                    </View>
+
+                    {/* Sensitive Words */}
+                    <Text style={configStyles.label}>Sensitive Words</Text>
+                    <TextInput
+                      style={configStyles.input}
+                      value={configSensitiveWords}
+                      onChangeText={setConfigSensitiveWords}
+                      placeholder="Comma-separated words to anonymize"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                    <Text style={configStyles.hint}>
+                      These words will always be anonymized regardless of PII detection.
+                    </Text>
+                  </>
+                )}
+
+                {/* Delete Project */}
+                <View style={configStyles.dangerSection}>
+                  <Text style={configStyles.dangerTitle}>Danger Zone</Text>
+                  <TouchableOpacity
+                    style={configStyles.deleteButton}
+                    onPress={() => setDeleteProjectVisible(true)}
+                    activeOpacity={0.7}
+                  >
+                    <IconSymbol
+                      ios_icon_name="trash.fill"
+                      android_material_icon_name="delete"
+                      size={20}
+                      color="#FFFFFF"
+                    />
+                    <Text style={configStyles.deleteButtonText}>Delete Project</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </SafeAreaView>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -710,5 +1031,133 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
+  },
+});
+
+const configStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  headerButton: {
+    minWidth: 60,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  cancelText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  saveText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+    textAlign: 'right',
+  },
+  body: {
+    flex: 1,
+  },
+  bodyContent: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+    marginTop: 16,
+  },
+  hint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  input: {
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    fontSize: 15,
+    color: colors.text,
+  },
+  multiline: {
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    marginBottom: 0,
+  },
+  providerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  providerChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  providerChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  providerChipText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  providerChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  dangerSection: {
+    marginTop: 40,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  dangerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.statusError,
+    marginBottom: 12,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.statusError,
+    borderRadius: 8,
+    paddingVertical: 12,
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
