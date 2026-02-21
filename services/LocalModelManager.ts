@@ -98,21 +98,15 @@ export const deleteModel = async (): Promise<void> => {
 
 /**
  * Basic device RAM check.
- * Returns `true` when we are confident the device has enough RAM.
- * Falls back to `true` (optimistic) when the info is unavailable because
- * the final guard is the try/catch around actual inference.
+ * Returns `true` (optimistic) on native because `expo-device` is not
+ * currently installed to read `totalMemory`. Inference failures are
+ * caught at runtime instead.
+ *
+ * TODO: Install `expo-device` and compare `Device.totalMemory` against
+ * `MIN_RAM_BYTES` for a real pre-flight check.
  */
 export const hasEnoughMemory = async (): Promise<boolean> => {
-  if (!isLocalModelSupported()) return false;
-
-  try {
-    // expo-device could provide totalMemory, but it is not currently
-    // installed. Returning `true` keeps the feature enabled;
-    // inference failures are caught at runtime in useHybridTranscribe.
-    return true;
-  } catch {
-    return true;
-  }
+  return isLocalModelSupported();
 };
 
 /**
