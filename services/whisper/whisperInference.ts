@@ -31,9 +31,10 @@ function isExecutorchLinked(): boolean {
   try {
     // TurboModuleRegistry lookup – returns null when not linked
     const { TurboModuleRegistry } = require('react-native');
-    // react-native-executorch registers several native modules; check the
-    // core one that SpeechToTextModule depends on
+    // react-native-executorch registers 'ETInstaller' as its TurboModule name
+    // (see node_modules/react-native-executorch/src/native/NativeETInstaller.ts)
     const nativeModule =
+      TurboModuleRegistry.get('ETInstaller') ??
       TurboModuleRegistry.get('ExpoExecutorch') ??
       TurboModuleRegistry.get('RnExecutorch') ??
       TurboModuleRegistry.get('ETModule');
