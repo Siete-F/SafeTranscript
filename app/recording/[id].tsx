@@ -17,6 +17,7 @@ import { colors, commonStyles } from '@/styles/commonStyles';
 import { Recording } from '@/types';
 import * as Clipboard from 'expo-clipboard';
 import { getRecordingById, deleteRecording } from '@/db/operations/recordings';
+import { getApiKeys } from '@/db/operations/apikeys';
 import { runProcessingPipeline } from '@/services/processing';
 import { getAudioFileUri } from '@/services/audioStorage';
 import { Modal } from '@/components/ui/Modal';
@@ -27,6 +28,8 @@ export default function RecordingDetailScreen() {
   const [recording, setRecording] = useState<Recording | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const [retranscribing, setRetranscribing] = useState(false);
+  const [hasMistralKey, setHasMistralKey] = useState(false);
   const [modal, setModal] = useState<{
     visible: boolean;
     title: string;
@@ -66,6 +69,18 @@ export default function RecordingDetailScreen() {
     console.log('[RecordingDetailScreen] Loading recording:', id);
     loadRecording();
   }, [id, loadRecording]);
+
+  // Check if Mistral API key is configured (for re-transcription)
+  useEffect(() => {
+    (async () => {
+      try {
+        const keys = await getApiKeys();
+        setHasMistralKey(!!keys.mistralKey);
+      } catch {
+        setHasMistralKey(false);
+      }
+    })();
+  }, []);
 
   // Set local audio file URI for playback
   useEffect(() => {
@@ -150,6 +165,34 @@ export default function RecordingDetailScreen() {
       });
     } finally {
       setRetrying(false);
+      await loadRecording();
+    }
+  };
+
+  const handleRetranscribe = async () => {
+    if (!recording || !hasMistralKey) return;
+
+    setRetranscribing(true);
+    try {
+      console.log('[RecordingDetailScreen] User triggered re-transcription with Voxtral API');
+      await runProcessingPipeline(recording.id, recording.projectId, { forceVoxtralApi: true });
+      await loadRecording();
+      setModal({
+        visible: true,
+        title: 'Re-transcribed',
+        message: 'Recording has been re-transcribed using the Voxtral API.',
+        type: 'success',
+      });
+    } catch (error) {
+      console.error('[RecordingDetailScreen] Error during re-transcription:', error);
+      setModal({
+        visible: true,
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to re-transcribe recording',
+        type: 'error',
+      });
+    } finally {
+      setRetranscribing(false);
       await loadRecording();
     }
   };
@@ -384,7 +427,15 @@ export default function RecordingDetailScreen() {
         {recording.transcription && (
           <View style={styles.card}>
             <View style={styles.outputHeader}>
-              <Text style={styles.sectionTitle}>Transcription</Text>
+              <Text style={styles.sectionTitle}>
+                Transcription
+                {recording.transcriptionSource === 'whisper' && (
+                  <Text style={styles.transcriptionSourceBadge}> (Whisper)</Text>
+                )}
+                {recording.transcriptionSource === 'voxtral-api' && (
+                  <Text style={styles.transcriptionSourceBadge}> (Voxtral)</Text>
+                )}
+              </Text>
               {recording.anonymizedTranscription && (
                 <TouchableOpacity
                   style={[styles.payloadButton, showAnonymizedPayload && styles.payloadButtonActive]}
@@ -407,6 +458,39 @@ export default function RecordingDetailScreen() {
               </>
             ) : (
               renderTranscriptionWithPII(recording.transcription, recording.piiMappings)
+            )}
+
+            {/* Re-transcribe with Voxtral API — shown when transcription was done with Whisper */}
+            {recording.transcriptionSource === 'whisper' && (
+              <TouchableOpacity
+                style={[
+                  styles.retranscribeButton,
+                  !hasMistralKey && styles.retranscribeButtonDisabled,
+                ]}
+                onPress={handleRetranscribe}
+                disabled={!hasMistralKey || retranscribing}
+                activeOpacity={0.7}
+              >
+                {retranscribing ? (
+                  <ActivityIndicator size="small" color={hasMistralKey ? colors.card : colors.textSecondary} />
+                ) : (
+                  <IconSymbol
+                    ios_icon_name="arrow.triangle.2.circlepath"
+                    android_material_icon_name="sync"
+                    size={16}
+                    color={hasMistralKey ? colors.card : colors.textSecondary}
+                  />
+                )}
+                <Text style={[
+                  styles.retranscribeButtonText,
+                  !hasMistralKey && styles.retranscribeButtonTextDisabled,
+                ]}>
+                  {retranscribing ? 'Re-transcribing…' : 'Re-transcribe with Voxtral API'}
+                </Text>
+                {!hasMistralKey && (
+                  <Text style={styles.retranscribeHint}>Mistral API key required</Text>
+                )}
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -733,6 +817,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
+  },
+  transcriptionSourceBadge: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: colors.textSecondary,
+  },
+  retranscribeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 14,
+    gap: 8,
+  },
+  retranscribeButtonDisabled: {
+    backgroundColor: `${colors.border}80`,
+  },
+  retranscribeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.card,
+  },
+  retranscribeButtonTextDisabled: {
+    color: colors.textSecondary,
+  },
+  retranscribeHint: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginLeft: 4,
   },
   deleteButton: {
     flexDirection: 'row',

@@ -215,6 +215,7 @@ export interface RecordingMeta {
   audioPath?: string;
   audioDuration?: number;
   customFieldValues: Record<string, any>;
+  transcriptionSource?: string;
   piiMappings?: Record<string, string>;
   errorMessage?: string;
   createdAt: string;

@@ -20,6 +20,8 @@ export interface CustomField {
   type: 'text' | 'number' | 'date';
 }
 
+export type TranscriptionSource = 'whisper' | 'voxtral-api';
+
 export interface Recording {
   id: string;
   projectId: string;
@@ -29,6 +31,7 @@ export interface Recording {
   customFieldValues: Record<string, any>;
   transcription?: string;
   transcriptionData?: TranscriptionSegment[];
+  transcriptionSource?: TranscriptionSource;
   anonymizedTranscription?: string;
   piiMappings?: Record<string, string>;
   llmOutput?: string;

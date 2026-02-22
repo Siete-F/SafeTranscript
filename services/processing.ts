@@ -20,6 +20,8 @@ import { isWavExtension } from './whisper/audioUtils';
 interface PipelineOptions {
   /** Skip transcription and re-use the existing transcription text. */
   skipTranscription?: boolean;
+  /** Force transcription via the Mistral Voxtral API, even if local Whisper is available. */
+  forceVoxtralApi?: boolean;
 }
 
 /**
@@ -67,13 +69,16 @@ export async function runProcessingPipeline(
       const audioUri = getAudioFileUri(recording.audioPath);
 
       // Determine transcription method: local Whisper vs. remote API
-      const useLocalWhisper = await shouldUseLocalWhisper(audioUri);
+      const useLocalWhisper = !options?.forceVoxtralApi && await shouldUseLocalWhisper(audioUri);
 
       let transcriptionData;
+      let transcriptionSource: 'whisper' | 'voxtral-api';
+
       if (useLocalWhisper) {
         console.log('[Pipeline] Using LOCAL Whisper model for transcription');
         const { transcribeWithWhisper } = require('./whisper/whisperInference');
         transcriptionData = await transcribeWithWhisper(audioUri, 'nl');
+        transcriptionSource = 'whisper';
       } else {
         console.log('[Pipeline] Using Mistral API for transcription');
         const mistralKey = apiKeysRecord.mistralKey;
@@ -88,15 +93,17 @@ export async function runProcessingPipeline(
           mistralKey,
           project.sensitiveWords,
         );
+        transcriptionSource = 'voxtral-api';
       }
 
       await updateRecording(recordingId, {
         transcription: transcriptionData.fullText,
         transcriptionData: transcriptionData.segments,
+        transcriptionSource,
       });
 
       transcriptionText = transcriptionData.fullText;
-      console.log(`[Pipeline] Transcription done: ${transcriptionData.segments.length} segments`);
+      console.log(`[Pipeline] Transcription done (${transcriptionSource}): ${transcriptionData.segments.length} segments`);
     }
 
     // Step 2: Anonymize (if enabled AND LLM is enabled)

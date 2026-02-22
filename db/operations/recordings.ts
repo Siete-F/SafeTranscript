@@ -37,6 +37,7 @@ async function buildRecording(
     customFieldValues: meta?.customFieldValues ?? {},
     transcription: transcription ?? undefined,
     transcriptionData: transcriptionData ?? undefined,
+    transcriptionSource: (meta?.transcriptionSource as Recording['transcriptionSource']) ?? undefined,
     anonymizedTranscription: anonymized ?? undefined,
     piiMappings: meta?.piiMappings,
     llmOutput: llmOutput ?? undefined,
@@ -106,6 +107,7 @@ export async function updateRecording(
     customFieldValues: Record<string, any>;
     transcription: string;
     transcriptionData: any[];
+    transcriptionSource: string;
     anonymizedTranscription: string;
     piiMappings: Record<string, string>;
     llmOutput: string;
@@ -129,6 +131,7 @@ export async function updateRecording(
   if (data.customFieldValues !== undefined) meta.customFieldValues = data.customFieldValues;
   if (data.piiMappings !== undefined) meta.piiMappings = data.piiMappings;
   if (data.errorMessage !== undefined) meta.errorMessage = data.errorMessage;
+  if (data.transcriptionSource !== undefined) meta.transcriptionSource = data.transcriptionSource;
 
   await FileStorage.writeRecordingMeta(projectFolder, timestamp, meta);
 
