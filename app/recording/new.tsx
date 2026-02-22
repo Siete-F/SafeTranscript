@@ -30,9 +30,10 @@ import { Modal } from '@/components/ui/Modal';
 import { checkWhisperModelExists } from '@/services/whisper/WhisperModelManager';
 
 /**
- * Recording preset for local Whisper transcription (iOS only).
- * Records as 16kHz mono WAV (LPCM) which can be directly parsed to Float32Array.
- * On Android, we keep the standard M4A format since MediaRecorder doesn't support WAV.
+ * Recording preset for local Whisper transcription.
+ * On iOS, records as 16kHz mono WAV (LPCM) which can be directly parsed to Float32Array.
+ * On Android, MediaRecorder doesn't support WAV, so we record as M4A and auto-convert
+ * to WAV via FFmpeg before Whisper inference.
  */
 const WHISPER_RECORDING_PRESET = Platform.OS === 'ios' ? {
   extension: '.wav',

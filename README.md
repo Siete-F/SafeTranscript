@@ -48,6 +48,7 @@ All data is stored locally on-device. On iOS/Android, projects and recordings ar
 │   ├── anonymization.ts        #   Regex-based PII detection & masking
 │   ├── llm.ts                  #   LLM provider abstraction (OpenAI, Gemini, Mistral)
 │   ├── audioStorage.ts         #   Audio file management
+│   ├── storageMigration.ts     #   Storage root migration (copy/adopt/clean)
 │   ├── processing.ts           #   Processing pipeline (auto-routes local vs API)
 │   ├── audioConverter.ts       #   M4A → WAV conversion via FFmpeg (for Android Whisper)
 │   ├── LocalModelManager.ts    #   Backward-compatible façade for whisper/
@@ -150,7 +151,10 @@ On mobile, all project data is stored as human-readable files in a configurable 
       2024-01-15T10-30-00-123.md          ← LLM output (markdown)
 ```
 
-The timestamp in the filename links the audio, transcription, and LLM response together. The storage root is configurable via the Settings screen.
+The timestamp in the filename links the audio, transcription, and LLM response together. The storage root is configurable via the Settings screen. When changing the storage location:
+- If the new path already contains SafeTranscript project folders (with `config.json`), they are adopted automatically.
+- If the new path is empty, the user can choose to **copy** all existing data or **start clean**.
+- Data at the previous location is never deleted.
 
 ## Scripts
 

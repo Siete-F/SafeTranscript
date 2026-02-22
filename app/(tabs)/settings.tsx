@@ -383,8 +383,8 @@ export default function SettingsScreen() {
             </Text>
             <Text style={styles.keyNote}>
               {modelDownloaded
-                ? 'Local transcription active — new recordings will be transcribed on-device without an API key. On iOS, audio is recorded as WAV for direct processing.'
-                : 'When downloaded, new recordings on iOS will be transcribed locally. On Android, M4A recordings still use the Mistral API.'}
+                ? 'Local transcription active — new recordings will be transcribed on-device without an API key. On iOS, audio is recorded as WAV for direct processing. On Android, M4A is auto-converted to WAV.'
+                : 'When downloaded, new recordings will be transcribed locally on iOS and Android. No API key needed for transcription.'}
             </Text>
             {isDownloading && (
               <View style={styles.progressBarContainer}>
