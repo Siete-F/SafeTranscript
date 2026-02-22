@@ -50,7 +50,7 @@ All data is stored locally on-device. On iOS/Android, projects and recordings ar
 │   ├── audioStorage.ts         #   Audio file management
 │   ├── storageMigration.ts     #   Storage root migration (copy/adopt/clean)
 │   ├── processing.ts           #   Processing pipeline (auto-routes local vs API)
-│   ├── audioConverter.ts       #   M4A → WAV conversion via FFmpeg (for Android Whisper)
+│   ├── audioConverter.ts       #   M4A → WAV conversion via Android MediaCodec
 │   ├── LocalModelManager.ts    #   Backward-compatible façade for whisper/
 │   └── whisper/                #   On-device Whisper transcription
 │       ├── config.ts           #     Model variant definitions (Base, Small)
@@ -96,7 +96,7 @@ Audio Recording
 Transcription           ──►  Raw transcript
   Whisper model downloaded:  On-device Whisper (Base or Small, multilingual)
                              iOS: records as WAV 16kHz mono directly.
-                             Android: records M4A, auto-converts to WAV via FFmpeg.
+                             Android: records M4A, auto-converts to WAV via MediaCodec.
                              No API key needed.
   No model / web:            Mistral Voxtral Transcribe v2 API
                              Supports M4A, speaker labels, keyword bias.

@@ -17,7 +17,6 @@ import { anonymizeTranscription, reversePIIMappings } from './anonymization';
 import { processWithLLM } from './llm';
 import { checkWhisperModelExists } from './whisper/WhisperModelManager';
 import { isWavExtension } from './whisper/audioUtils';
-import { transcribeWithWhisper } from './whisper/whisperInference';
 
 interface PipelineOptions {
   /** Skip transcription and re-use the existing transcription text. */
@@ -78,7 +77,10 @@ export async function runProcessingPipeline(
 
       if (useLocalWhisper) {
         console.log('[Pipeline] Using LOCAL Whisper model for transcription');
-        transcriptionData = await transcribeWithWhisper(audioUri, 'nl');
+        // Lazy import to avoid loading native AudioConverter module (via audioConverter)
+        // at module evaluation time, which crashes screens that import processing.ts
+        const whisperModule = await import('./whisper/whisperInference');
+        transcriptionData = await whisperModule.transcribeWithWhisper(audioUri, 'nl');
         transcriptionSource = 'whisper';
       } else {
         console.log('[Pipeline] Using Mistral API for transcription');
