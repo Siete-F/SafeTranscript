@@ -34,8 +34,16 @@ import {
 import { disposeGLiNER } from '@/services/gliner/GLiNERInference';
 import { MODEL_VARIANTS, DEFAULT_VARIANT } from '@/services/gliner/config';
 import type { ModelVariantId } from '@/services/gliner/config';
+import { getStorageRoot, getDefaultStorageRoot } from '@/services/fileStorage';
+import {
+  validatePath,
+  detectExistingData,
+  changeStorageRoot,
+  normalisePath,
+} from '@/services/storageMigration';
 
 const localModelAvailable = isLocalModelSupported();
+const isNative = Platform.OS === 'ios' || Platform.OS === 'android';
 
 export default function SettingsScreen() {
   const [apiKeys, setApiKeys] = useState<ApiKeys>({});
@@ -47,7 +55,7 @@ export default function SettingsScreen() {
     visible: boolean;
     title: string;
     message: string;
-    type: 'success' | 'error';
+    type: 'info' | 'success' | 'error';
   }>({
     visible: false,
     title: '',
@@ -67,6 +75,24 @@ export default function SettingsScreen() {
   const [selectedVariant, setSelectedVariant] = useState<ModelVariantId>(DEFAULT_VARIANT);
   const [downloadedVariant, setDownloadedVariant] = useState<ModelVariantId | null>(null);
 
+  // --- Storage root state (native only) ---
+  const [currentStorageRoot, setCurrentStorageRoot] = useState<string>('');
+  const [newStoragePath, setNewStoragePath] = useState<string>('');
+  const [storageChanging, setStorageChanging] = useState(false);
+  const [storageMigrationModal, setStorageMigrationModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    choice: 'copy' | 'clean' | 'adopt' | null;
+    newPath: string;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    choice: null,
+    newPath: '',
+  });
+
   useEffect(() => {
     loadApiKeys();
     if (localModelAvailable) {
@@ -75,6 +101,10 @@ export default function SettingsScreen() {
         setDownloadedWhisperVariant(v);
         if (v) setSelectedWhisperVariant(v);
       }).catch(() => {});
+    }
+    if (isNative) {
+      setCurrentStorageRoot(getStorageRoot());
+      setNewStoragePath(getStorageRoot());
     }
     checkGLiNERModelExists().then(setPiiModelDownloaded).catch(() => setPiiModelDownloaded(false));
     getDownloadedVariant().then((v) => {
@@ -174,6 +204,82 @@ export default function SettingsScreen() {
     } catch (error) {
       setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete PII model', type: 'error' });
     }
+  };
+
+  // --- Storage root handlers ---
+
+  const handleChangeStorageRoot = async () => {
+    const normalised = normalisePath(newStoragePath);
+    if (!normalised) {
+      setModal({ visible: true, title: 'Error', message: 'Please enter a valid path.', type: 'error' });
+      return;
+    }
+    if (normalised === currentStorageRoot) {
+      setModal({ visible: true, title: 'Info', message: 'This is already the current storage location.', type: 'info' });
+      return;
+    }
+
+    setStorageChanging(true);
+    try {
+      // 1. Validate the path is writable
+      const validation = await validatePath(normalised);
+      if (!validation.valid) {
+        setModal({ visible: true, title: 'Error', message: validation.error ?? 'Path is not valid.', type: 'error' });
+        return;
+      }
+
+      // 2. Detect existing data at the new location
+      const detection = await detectExistingData(normalised);
+
+      if (detection.hasExistingData) {
+        // Auto-adopt: existing SafeTranscript folder structure found
+        setStorageMigrationModal({
+          visible: true,
+          title: 'Existing Data Found',
+          message: `Found ${detection.projectCount} project(s) at the new location (${detection.projectNames.join(', ')}). This will be used as your data going forward.`,
+          choice: 'adopt',
+          newPath: normalised,
+        });
+      } else {
+        // Ask: copy or start clean?
+        setStorageMigrationModal({
+          visible: true,
+          title: 'Change Storage Location',
+          message: 'The new location is empty. Do you want to copy all existing data there, or start with a clean slate?',
+          choice: null, // user picks
+          newPath: normalised,
+        });
+      }
+    } catch (e: any) {
+      setModal({ visible: true, title: 'Error', message: e.message ?? 'Failed to change storage location.', type: 'error' });
+    } finally {
+      setStorageChanging(false);
+    }
+  };
+
+  const handleMigrationConfirm = async (choice: 'copy' | 'clean' | 'adopt') => {
+    setStorageMigrationModal((prev) => ({ ...prev, visible: false }));
+    setStorageChanging(true);
+    try {
+      const msg = await changeStorageRoot(storageMigrationModal.newPath, choice);
+      const newRoot = getStorageRoot();
+      setCurrentStorageRoot(newRoot);
+      setNewStoragePath(newRoot);
+      setModal({ visible: true, title: 'Success', message: msg, type: 'success' });
+    } catch (e: any) {
+      setModal({ visible: true, title: 'Error', message: e.message ?? 'Migration failed.', type: 'error' });
+    } finally {
+      setStorageChanging(false);
+    }
+  };
+
+  const handleResetStorageRoot = async () => {
+    const defaultRoot = getDefaultStorageRoot();
+    if (defaultRoot === currentStorageRoot) {
+      setModal({ visible: true, title: 'Info', message: 'Already using the default storage location.', type: 'info' });
+      return;
+    }
+    setNewStoragePath(defaultRoot);
   };
 
   const openaiKeyDisplay = apiKeys.openaiKey || 'Not set';
@@ -374,6 +480,52 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {isNative && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Storage Location</Text>
+            <Text style={styles.sectionDescription}>
+              Choose where your projects, recordings, and transcriptions are stored on this device.
+              Changing the location will not delete data from the previous location.
+            </Text>
+
+            <View style={styles.keyCard}>
+              <View style={styles.keyHeader}>
+                <IconSymbol ios_icon_name="folder.fill" android_material_icon_name="folder" size={24} color={colors.primary} />
+                <Text style={styles.keyTitle}>Data Folder</Text>
+              </View>
+              <Text style={styles.keyStatus}>Current: {currentStorageRoot}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter new storage path"
+                placeholderTextColor={colors.textSecondary}
+                value={newStoragePath}
+                onChangeText={setNewStoragePath}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <View style={styles.storageButtonRow}>
+                <TouchableOpacity
+                  style={[styles.saveButton, styles.storageButton, storageChanging && styles.saveButtonDisabled]}
+                  onPress={handleChangeStorageRoot}
+                  disabled={storageChanging}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {storageChanging ? 'Changing...' : 'Change Location'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.resetButton]}
+                  onPress={handleResetStorageRoot}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.resetButtonText}>Reset to Default</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.infoCard}>
@@ -384,6 +536,30 @@ export default function SettingsScreen() {
       </ScrollView>
 
       <Modal visible={modal.visible} title={modal.title} message={modal.message} type={modal.type} onClose={() => setModal({ ...modal, visible: false })} />
+
+      {/* Storage migration modal – adopt (auto) or copy/clean choice */}
+      {storageMigrationModal.choice === 'adopt' ? (
+        <Modal
+          visible={storageMigrationModal.visible}
+          title={storageMigrationModal.title}
+          message={storageMigrationModal.message}
+          type="confirm"
+          confirmText="Use This Data"
+          onClose={() => setStorageMigrationModal((prev) => ({ ...prev, visible: false }))}
+          onConfirm={() => handleMigrationConfirm('adopt')}
+        />
+      ) : (
+        <Modal
+          visible={storageMigrationModal.visible}
+          title={storageMigrationModal.title}
+          message={storageMigrationModal.message}
+          type="confirm"
+          confirmText="Copy Data"
+          cancelText="Start Clean"
+          onClose={() => handleMigrationConfirm('clean')}
+          onConfirm={() => handleMigrationConfirm('copy')}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -422,4 +598,8 @@ const styles = StyleSheet.create({
   variantName: { fontSize: 15, fontWeight: '600', color: colors.text },
   variantNameSelected: { color: colors.primary },
   variantDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  storageButtonRow: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  storageButton: { flex: 1 },
+  resetButton: { flex: 1, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
+  resetButtonText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 });
