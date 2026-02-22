@@ -52,7 +52,7 @@ Safe Transcript is a privacy-focused audio transcription app built with React Na
 - `services/llm.ts` — Raw fetch to OpenAI/Gemini/Mistral REST APIs
 - `services/audioStorage.ts` — Audio file management (delegates to fileStorage on native)
 - `services/processing.ts` — Processing pipeline: transcribe → anonymize → LLM process (auto-routes to local Whisper or Mistral API). Supports `forceVoxtralApi` option for re-transcription.
-- `services/audioConverter.ts` — Converts M4A/other audio to 16kHz mono WAV via `ffmpeg-kit-react-native` for local Whisper on Android
+- `services/audioConverter.ts` — Converts M4A/other audio to 16kHz mono WAV via a local Expo module (`modules/audio-converter`) using Android's MediaCodec APIs
 - `services/audioConverter.web.ts` — Web stub (no conversion needed)
 - `services/fileStorage.ts` — File-based project/recording storage (native only)
 - `services/whisper/` — On-device Whisper transcription:
@@ -79,7 +79,7 @@ Recordings transcribed with Whisper can be **re-transcribed** with the Voxtral A
 - `cross-env` is required in npm scripts for Windows compatibility.
 - Maps use WebView + Leaflet CDN on native, iframe + Leaflet CDN on web (no npm map packages).
 - **LLM/transcription SDKs**: Use raw `fetch` calls to provider REST APIs instead of Node.js SDKs for React Native compatibility.
-- **Local transcription** works on both iOS and Android. On iOS, recordings are directly captured as WAV (16kHz mono LPCM) when the Whisper model is downloaded. On Android, recordings are M4A (MediaRecorder limitation) and are automatically converted to WAV via `ffmpeg-kit-react-native` before Whisper inference. The temporary WAV is deleted after transcription.
+- **Local transcription** works on both iOS and Android. On iOS, recordings are directly captured as WAV (16kHz mono LPCM) when the Whisper model is downloaded. On Android, recordings are M4A (MediaRecorder limitation) and are automatically converted to WAV via a local Expo module (`modules/audio-converter`, using Android's built-in MediaCodec APIs) before Whisper inference. The temporary WAV is deleted after transcription.
 
 ## LLM Providers
 

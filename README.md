@@ -127,7 +127,7 @@ The original plan was to run Mistral's **Voxtral Mini 4B** locally via ExecuTorc
 | Storage (web) | SQLite via sql.js, persisted to localStorage |
 | Settings & Keys | SQLite (expo-sqlite), Drizzle ORM |
 | Transcription | Mistral Voxtral Transcribe v2 (API), Whisper multilingual via ExecuTorch (on-device, iOS/Android) |
-| Audio conversion | ffmpeg-kit-react-native (M4A → WAV on Android for Whisper) |
+| Audio conversion | Local Expo module using Android MediaCodec (M4A → WAV for Whisper) |
 | PII Detection | Regex-based anonymization (on-device) |
 | LLM Providers | OpenAI, Google Gemini, Mistral (via raw fetch) |
 
