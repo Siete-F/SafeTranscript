@@ -7,9 +7,10 @@ All data is stored locally on-device. On iOS/Android, projects and recordings ar
 ## Features
 
 - **Audio recording** with in-app microphone capture
-- **Speech-to-text** via Mistral Voxtral Transcribe v2 (API, with keyword support for domain-specific terms) or **on-device Whisper** (multilingual, via ExecuTorch) — no API key needed for local transcription
-- **Re-transcription** — recordings originally transcribed with Whisper can be re-transcribed with the Voxtral API for higher quality
-- **PII anonymization** — detects and masks phone numbers, emails, addresses, health IDs, credit card numbers, and more using regex-based detection
+- **Speech-to-text** via Mistral Voxtral Transcribe v2 (API, with keyword support for domain-specific terms and **speaker diarization**) or **on-device Whisper** (multilingual, via ExecuTorch) — no API key needed for local transcription
+- **Speaker diarization** — Voxtral API identifies speakers automatically; transcriptions display as color-coded conversation turns with the ability to rename speakers inline
+- **Re-transcription** — recordings originally transcribed with Whisper can be re-transcribed with the Voxtral API for higher quality and speaker identification
+- **PII anonymization** — detects and masks phone numbers, emails, addresses, health IDs, credit card numbers, names, organizations, and more using a hybrid approach: GLiNER NER model (contextual entities) + regex (structured patterns), with regex-only fallback when the model is not downloaded
 - **LLM analysis** — sends anonymized transcripts to a configurable LLM provider (OpenAI, Google Gemini, or Mistral) with a custom prompt
 - **Project-based organization** — group recordings into projects with custom fields and export to CSV
 - **Cross-platform** — runs on iOS, Android, and Web (Expo / React Native)
@@ -18,17 +19,22 @@ All data is stored locally on-device. On iOS/Android, projects and recordings ar
 ## Repository Layout
 
 ```
-├── app/                        # Screens (Expo Router)
+├── app/                        # Screen files (Expo Router) — thin orchestrators
 │   ├── (tabs)/                 # Tab navigation
 │   │   ├── index.tsx           #   Projects list
-│   │   └── settings.tsx        #   Settings & API keys
+│   │   └── settings.tsx        #   Settings (delegates to section components)
 │   ├── project/
 │   │   ├── [id].tsx            #   Project detail & recordings list
 │   │   └── create.tsx          #   Create project form
 │   └── recording/
 │       ├── [id].tsx            #   Recording detail (transcript, LLM output, audio player)
 │       └── new.tsx             #   New recording (mic capture + upload)
-├── components/                 # Shared UI components
+├── components/                 # Extracted UI components by domain
+│   ├── ui/                     #   Generic reusable (Modal)
+│   ├── project/                #   Project-specific (RecordingCard, ProjectConfigModal)
+│   ├── recording/              #   Recording-specific (TranscriptionCard, LlmOutputCard)
+│   └── settings/               #   Settings sections (ApiKeys, Whisper, PII, Storage)
+├── hooks/                      # Custom React hooks (useModal)
 ├── db/                         # Database & data operations
 │   ├── client.ts               #   Native SQLite client (settings & API keys)
 │   ├── client.web.ts           #   Web SQLite client (sql.js, all data)
@@ -45,20 +51,28 @@ All data is stored locally on-device. On iOS/Android, projects and recordings ar
 │   ├── fileStorage.ts          #   File-based storage engine (native)
 │   ├── fileStorage.web.ts      #   File storage stub (web)
 │   ├── transcription.ts        #   Mistral Voxtral API via raw fetch
-│   ├── anonymization.ts        #   Regex-based PII detection & masking
+│   ├── anonymization.ts        #   Hybrid PII detection (GLiNER NER + regex)
 │   ├── llm.ts                  #   LLM provider abstraction (OpenAI, Gemini, Mistral)
 │   ├── audioStorage.ts         #   Audio file management
 │   ├── storageMigration.ts     #   Storage root migration (copy/adopt/clean)
 │   ├── processing.ts           #   Processing pipeline (auto-routes local vs API)
 │   ├── audioConverter.ts       #   M4A → WAV conversion via Android MediaCodec
 │   ├── LocalModelManager.ts    #   Backward-compatible façade for whisper/
+│   ├── gliner/                 #   On-device GLiNER PII detection (ONNX)
+│   │   ├── config.ts           #     Model variants (INT8 ~349MB, FP16 ~580MB), PII labels
+│   │   ├── GLiNERModelManager.ts  # Download, verify & delete model files
+│   │   ├── GLiNERInference.ts  #     Zero-shot NER entity detection
+│   │   ├── processor.ts        #     Input pre-processing (spans, tokens)
+│   │   ├── decoder.ts          #     Output post-processing
+│   │   ├── tokenizer.ts        #     SentencePiece tokenizer
+│   │   └── onnxRuntime.ts      #     Platform-specific ONNX session
 │   └── whisper/                #   On-device Whisper transcription
 │       ├── config.ts           #     Model variant definitions (Base, Small)
 │       ├── WhisperModelManager.ts  # Download, verify & delete model files
 │       ├── audioUtils.ts       #     WAV parser → Float32Array
 │       └── whisperInference.ts #     ExecuTorch Whisper batch inference
 ├── contexts/                   # React contexts
-├── utils/                      # Error logger
+├── utils/                      # Shared utilities (recording helpers, error logger)
 ├── styles/                     # Shared styles
 ├── types/                      # TypeScript type definitions
 ├── assets/                     # Images, fonts
@@ -99,7 +113,7 @@ Transcription           ──►  Raw transcript
                              Android: records M4A, auto-converts to WAV via MediaCodec.
                              No API key needed.
   No model / web:            Mistral Voxtral Transcribe v2 API
-                             Supports M4A, speaker labels, keyword bias.
+                             Supports M4A, speaker diarization, keyword bias.
       │
       ▼
 PII Anonymization       ──►  Masked transcript (GLiNER NER + regex, on-device)
@@ -108,7 +122,7 @@ PII Anonymization       ──►  Masked transcript (GLiNER NER + regex, on-dev
 LLM Analysis            ──►  Structured output (summary, action items, etc.)
 ```
 
-Recordings transcribed with the local Whisper model can be **re-transcribed** with the Voxtral API from the recording detail screen (requires a Mistral API key).
+Recordings transcribed with the local Whisper model can be **re-transcribed** with the Voxtral API from the recording detail screen (requires a Mistral API key). Voxtral transcriptions include **speaker diarization** — the UI shows a conversation view with color-coded speaker turns and inline rename.
 
 ### Why not Voxtral on-device?
 
@@ -129,7 +143,7 @@ The original plan was to run Mistral's **Voxtral Mini 4B** locally via ExecuTorc
 | Settings & Keys | SQLite (expo-sqlite), Drizzle ORM |
 | Transcription | Mistral Voxtral Transcribe v2 (API), Whisper multilingual via ExecuTorch (on-device, iOS/Android) |
 | Audio conversion | Local Expo module using Android MediaCodec (M4A → WAV for Whisper) |
-| PII Detection | Regex-based anonymization (on-device) |
+| PII Detection | GLiNER NER (ONNX Runtime, contextual entities) + regex (structured patterns), on-device |
 | LLM Providers | OpenAI, Google Gemini, Mistral (via raw fetch) |
 
 ## Data Storage (iOS/Android)

@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
 export interface TranscriptionSegment {
   speaker: string;
   timestamp: number;
+  endTimestamp?: number;
   text: string;
 }
 
@@ -93,17 +94,18 @@ function parseTranscriptionResponse(response: any): TranscriptionSegment[] {
   if (response.segments && Array.isArray(response.segments)) {
     response.segments.forEach((segment: any, index: number) => {
       segments.push({
-        speaker: segment.speaker || `Speaker ${(index % 2) + 1}`,
+        speaker: segment.speaker_id || segment.speaker || `speaker_${index}`,
         timestamp: Math.round((segment.start || 0) * 1000),
+        endTimestamp: segment.end != null ? Math.round(segment.end * 1000) : undefined,
         text: (segment.text || '').trim(),
       });
     });
   } else if (response.text && typeof response.text === 'string') {
-    segments.push({ speaker: 'Speaker 1', timestamp: 0, text: response.text.trim() });
+    segments.push({ speaker: 'speaker_0', timestamp: 0, text: response.text.trim() });
   } else if (typeof response === 'string') {
-    segments.push({ speaker: 'Speaker 1', timestamp: 0, text: response.trim() });
+    segments.push({ speaker: 'speaker_0', timestamp: 0, text: response.trim() });
   } else {
-    segments.push({ speaker: 'Speaker 1', timestamp: 0, text: '[Unexpected transcription format]' });
+    segments.push({ speaker: 'speaker_0', timestamp: 0, text: '[Unexpected transcription format]' });
   }
 
   return segments;

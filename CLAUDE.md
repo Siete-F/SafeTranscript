@@ -25,7 +25,9 @@ Safe Transcript is a privacy-focused audio transcription app built with React Na
 ## Architecture
 
 **Frontend:** React Native 0.81 + Expo SDK 54 + Expo Router (file-based routing) + React 19
-- Screens in `app/` with tab navigation in `app/(tabs)/`
+- Screen files in `app/` with tab navigation in `app/(tabs)/` — kept thin as orchestrators
+- Extracted UI components in `components/` organized by domain (`project/`, `recording/`, `settings/`, `ui/`)
+- Custom hooks in `hooks/` (e.g. `useModal`) and shared utilities in `utils/` (e.g. `recording.ts`)
 - `@/` path alias for imports from the frontend root
 - No authentication — single-user local app
 - On-device transcription via Whisper (ExecuTorch) managed by `services/whisper/` and `services/LocalModelManager.ts`
@@ -51,8 +53,8 @@ Safe Transcript is a privacy-focused audio transcription app built with React Na
 - Database client in `db/client.ts` (native) / `db/client.web.ts` (web)
 
 **Services (run on-device):**
-- `services/transcription.ts` — Mistral Voxtral API via raw fetch with multipart form data
-- `services/anonymization.ts` — Regex-based PII detection and masking
+- `services/transcription.ts` — Mistral Voxtral API via raw fetch with multipart form data; parses `speaker_id` for diarization
+- `services/anonymization.ts` — Hybrid PII detection: GLiNER NER (contextual entities) + regex (structured patterns), with regex-only fallback
 - `services/llm.ts` — Raw fetch to OpenAI/Gemini/Mistral REST APIs
 - `services/audioStorage.ts` — Audio file management (delegates to fileStorage on native)
 - `services/storageMigration.ts` — Storage root migration: path validation, existing-data detection, recursive copy, adopt/clean modes
@@ -66,11 +68,43 @@ Safe Transcript is a privacy-focused audio transcription app built with React Na
   - `WhisperModelManager.web.ts` — Web stub (local models not supported on web)
   - `audioUtils.ts` — WAV file parser: reads PCM → Float32Array at 16kHz for Whisper input
   - `whisperInference.ts` — Loads and runs Whisper via `SpeechToTextModule` (react-native-executorch). Auto-converts non-WAV audio to WAV before inference.
-- `services/LocalModelManager.ts` — Backward-compatible façade that delegates to `services/whisper/`
+- `services/gliner/` — On-device GLiNER PII detection (ONNX Runtime):
+  - `config.ts` — Model variant definitions (INT8 ~349MB, FP16 ~580MB), PII labels, label-to-type mapping
+  - `GLiNERModelManager.ts` — Download/delete/verify ONNX model + tokenizer files on disk
+  - `GLiNERModelManager.web.ts` — Web variant (stores model in IndexedDB)
+  - `GLiNERInference.ts` — Loads and runs GLiNER for zero-shot NER entity detection
+  - `processor.ts` — Input pre-processing (span generation, token mapping)
+  - `decoder.ts` — Output post-processing (span decoding, threshold filtering)
+  - `tokenizer.ts` — SentencePiece (mDeBERTa-v3) tokenizer
+  - `onnxRuntime.ts` / `onnxRuntime.web.ts` — Platform-specific ONNX Runtime session creation
+  - `types.ts` — Shared type definitions
+- `services/LocalModelManager.ts` — Thin façade re-exporting `services/whisper/` for the Settings UI
 
-**Processing Pipeline:** Audio → Whisper (local, on iOS/Android — M4A auto-converted to WAV on Android via FFmpeg) or Voxtral Transcribe v2 (API) → PII Anonymization (regex-based or GLiNER) → LLM Analysis (OpenAI/Gemini/Mistral)
+**Processing Pipeline:** Audio → Whisper (local, on iOS/Android — M4A auto-converted to WAV on Android via MediaCodec) or Voxtral Transcribe v2 (API, with speaker diarization) → PII Anonymization (GLiNER NER + regex hybrid, regex-only fallback) → LLM Analysis (OpenAI/Gemini/Mistral)
+
+**Components (extracted UI):**
+- `components/project/RecordingCard.tsx` — Recording list item with swipeable delete
+- `components/project/ProjectConfigModal.tsx` — Full-screen project settings editor
+- `components/recording/TranscriptionCard.tsx` — Transcription display with PII highlighting, speaker diarization view (conversation turns with colored speaker labels), inline speaker rename, and re-transcribe option
+- `components/recording/LlmOutputCard.tsx` — LLM output display with copy-to-clipboard
+- `components/settings/ApiKeysSection.tsx` — API key management (OpenAI, Gemini, Mistral)
+- `components/settings/WhisperModelSection.tsx` — Whisper model download/delete with variant picker
+- `components/settings/PiiModelSection.tsx` — GLiNER model download/delete with variant picker
+- `components/settings/StorageSection.tsx` — Storage location management with migration flow
+- `components/ui/Modal.tsx` — Reusable modal dialog (info, success, error, confirm)
+
+**Hooks & Utilities:**
+- `hooks/useModal.ts` — Shared modal state management (used by all screens)
+- `utils/recording.ts` — Recording status colors/labels, time formatting helpers
+- `utils/errorLogger.ts` — Dev console capture and log forwarding
+
+**Contexts:**
+- `contexts/WidgetContext.tsx` — iOS widget refresh via `@bacons/apple-targets` ExtensionStorage
+- `db/operations/export.ts` — CSV export of project recordings
 
 Recordings transcribed with Whisper can be **re-transcribed** with the Voxtral API from the recording detail screen. The `transcriptionSource` field (`'whisper' | 'voxtral-api'`) is stored in recording metadata to track which method was used.
+
+**Speaker Diarization:** Voxtral API transcriptions include speaker identification (`speaker_id` per segment). When multiple speakers are detected, the processing pipeline builds a default `speakerMap` (e.g. `{"speaker_0": "Speaker 1"}`). The TranscriptionCard renders diarized output as a conversation view with color-coded speaker turns. Users can rename speakers inline — names are persisted in the recording metadata (`speakerMap` field in `{timestamp}.json` on native, `speaker_map` column on web).
 
 ## Key Constraints
 
@@ -98,7 +132,7 @@ Configured per-project. Supported: OpenAI (gpt-4, gpt-3.5-turbo), Google Gemini 
   {project-slug}/
     config.json                           ← project settings (LLM config, custom fields, etc.)
     recordings/
-      {timestamp}.json                    ← recording metadata (status, duration, PII mappings)
+      {timestamp}.json                    ← recording metadata (status, duration, PII mappings, speaker map)
       {timestamp}.m4a / .wav               ← audio file (.wav when local Whisper is active on iOS)
     transcriptions/
       {timestamp}.txt                     ← raw transcription (plain text)

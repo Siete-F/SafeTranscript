@@ -118,21 +118,6 @@ export async function ensureWhisperLoaded(): Promise<boolean> {
 }
 
 /**
- * Unload the Whisper model from memory to free resources.
- */
-export function unloadWhisper(): void {
-  if (sttModule) {
-    try {
-      sttModule.delete();
-    } catch (e) {
-      console.warn('[WhisperInference] Error unloading model:', e);
-    }
-    sttModule = null;
-    loadedVariant = null;
-  }
-}
-
-/**
  * Transcribe a WAV audio file using the local Whisper model.
  *
  * @param audioUri - Path to an audio file (WAV preferred; M4A/other formats will be converted)

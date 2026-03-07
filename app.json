@@ -35,9 +35,7 @@
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser",
       "expo-file-system",
-      "@react-native-community/datetimepicker",
       "expo-asset",
       "expo-sqlite"
     ],

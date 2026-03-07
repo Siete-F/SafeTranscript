@@ -24,6 +24,7 @@ export const recordings = sqliteTable('recordings', {
   customFieldValues: text('custom_field_values'), // JSON string: Record<string, any>
   transcription: text('transcription'),
   transcriptionData: text('transcription_data'),  // JSON string: TranscriptionSegment[]
+  speakerMap: text('speaker_map'),                // JSON string: Record<string, string>
   anonymizedTranscription: text('anonymized_transcription'),
   piiMappings: text('pii_mappings'),              // JSON string: Record<string, string>
   llmOutput: text('llm_output'),

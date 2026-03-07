@@ -27,6 +27,8 @@ import { createRecording, updateRecording } from '@/db/operations/recordings';
 import { saveAudioFile } from '@/services/audioStorage';
 import { runProcessingPipeline } from '@/services/processing';
 import { Modal } from '@/components/ui/Modal';
+import { useModal } from '@/hooks/useModal';
+import { formatTime } from '@/utils/recording';
 import { checkWhisperModelExists } from '@/services/whisper/WhisperModelManager';
 
 /**
@@ -69,17 +71,7 @@ export default function NewRecordingScreen() {
   const [hasPermission, setHasPermission] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [whisperAvailable, setWhisperAvailable] = useState(false);
-  const [modal, setModal] = useState<{
-    visible: boolean;
-    title: string;
-    message: string;
-    type: 'success' | 'error' | 'info';
-  }>({
-    visible: false,
-    title: '',
-    message: '',
-    type: 'info',
-  });
+  const { modal, showModal, hideModal } = useModal();
 
   // Use WAV preset on iOS when Whisper model is available, otherwise standard M4A
   const recordingPreset = whisperAvailable && Platform.OS === 'ios'
@@ -102,12 +94,7 @@ export default function NewRecordingScreen() {
       setCustomFieldValues(initialValues);
     } catch (error) {
       console.error('[NewRecordingScreen] Error loading project:', error);
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to load project',
-        type: 'error',
-      });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to load project', 'error');
     }
   }, [projectId]);
 
@@ -126,12 +113,7 @@ export default function NewRecordingScreen() {
     try {
       const status = await AudioModule.requestRecordingPermissionsAsync();
       if (!status.granted) {
-        setModal({
-          visible: true,
-          title: 'Permission Required',
-          message: 'Microphone access is required to record audio',
-          type: 'error',
-        });
+        showModal('Permission Required', 'Microphone access is required to record audio', 'error');
         setHasPermission(false);
         return;
       }
@@ -148,12 +130,7 @@ export default function NewRecordingScreen() {
 
   const handleStartRecording = async () => {
     if (!hasPermission) {
-      setModal({
-        visible: true,
-        title: 'Permission Required',
-        message: 'Please grant microphone access to record',
-        type: 'error',
-      });
+      showModal('Permission Required', 'Please grant microphone access to record', 'error');
       return;
     }
 
@@ -162,12 +139,7 @@ export default function NewRecordingScreen() {
       audioRecorder.record();
     } catch (error) {
       console.error('[NewRecordingScreen] Error starting recording:', error);
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: 'Failed to start recording',
-        type: 'error',
-      });
+      showModal('Error', 'Failed to start recording', 'error');
     }
   };
 
@@ -179,18 +151,13 @@ export default function NewRecordingScreen() {
       handleSaveRecording(uri);
     } catch (error) {
       console.error('[NewRecordingScreen] Error stopping recording:', error);
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: 'Failed to stop recording',
-        type: 'error',
-      });
+      showModal('Error', 'Failed to stop recording', 'error');
     }
   };
 
   const handleSaveRecording = async (audioUri: string | null) => {
     if (!audioUri) {
-      setModal({ visible: true, title: 'Error', message: 'No audio recorded', type: 'error' });
+      showModal('Error', 'No audio recorded', 'error');
       return;
     }
 
@@ -216,24 +183,14 @@ export default function NewRecordingScreen() {
         console.error('[NewRecordingScreen] Pipeline error:', err);
       });
 
-      setModal({
-        visible: true,
-        title: 'Success',
-        message: 'Recording saved and processing started',
-        type: 'success',
-      });
+      showModal('Success', 'Recording saved and processing started', 'success');
 
       setTimeout(() => {
         router.back();
       }, 1500);
     } catch (error) {
       console.error('[NewRecordingScreen] Error saving recording:', error);
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to save recording',
-        type: 'error',
-      });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to save recording', 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -244,14 +201,6 @@ export default function NewRecordingScreen() {
       ...prev,
       [fieldName]: value,
     }));
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    const minsText = mins.toString().padStart(2, '0');
-    const secsText = secs.toString().padStart(2, '0');
-    return `${minsText}:${secsText}`;
   };
 
   const isRecording = recorderState.isRecording;
@@ -351,7 +300,7 @@ export default function NewRecordingScreen() {
         title={modal.title}
         message={modal.message}
         type={modal.type}
-        onClose={() => setModal({ ...modal, visible: false })}
+        onClose={hideModal}
       />
     </SafeAreaView>
   );

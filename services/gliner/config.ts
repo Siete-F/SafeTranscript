@@ -57,17 +57,6 @@ export const MODEL_VARIANTS: Record<ModelVariantId, ModelVariant> = {
 
 export const DEFAULT_VARIANT: ModelVariantId = 'multi_int8';
 
-/** Settings key for storing the selected model variant */
-export const SETTING_GLINER_VARIANT = 'gliner_model_variant';
-
-// --- Backward-compatible exports ---
-
-/** Current model files (references default variant) */
-export const MODEL_FILES = MODEL_VARIANTS[DEFAULT_VARIANT].urls;
-
-/** Total download size (approximate, for default variant) */
-export const MODEL_SIZE_MB = MODEL_VARIANTS[DEFAULT_VARIANT].sizeMB;
-
 /** Default GLiNER config (overridden by downloaded gliner_config.json) */
 export const DEFAULT_CONFIG = {
   spanMode: 'markerV0' as const,

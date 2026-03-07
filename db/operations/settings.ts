@@ -30,11 +30,6 @@ export async function setSetting(key: string, value: string): Promise<void> {
   }
 }
 
-/** Delete a setting. */
-export async function deleteSetting(key: string): Promise<void> {
-  await db.delete(schema.settings).where(eq(schema.settings.key, key));
-}
-
 // --- Well-known setting keys ---
 
 export const SETTING_STORAGE_ROOT = 'storage_root';

@@ -9,9 +9,6 @@ import {
   RefreshControl,
   Platform,
   Pressable,
-  ScrollView,
-  TextInput,
-  Switch,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,17 +16,18 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors, commonStyles } from '@/styles/commonStyles';
-import { Project, Recording, LLM_PROVIDERS } from '@/types';
+import { Project, Recording } from '@/types';
 import { getProjectById, updateProject, deleteProject } from '@/db/operations/projects';
 import { getRecordingsByProject, deleteRecording, updateRecording } from '@/db/operations/recordings';
 import { exportProjectCSV } from '@/db/operations/export';
 import { getAudioFileUri } from '@/services/audioStorage';
 import { runProcessingPipeline } from '@/services/processing';
 import { Modal } from '@/components/ui/Modal';
+import { RecordingCard } from '@/components/project/RecordingCard';
+import { ProjectConfigModal, type ProjectConfigUpdate } from '@/components/project/ProjectConfigModal';
+import { useModal } from '@/hooks/useModal';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import Reanimated, { SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 export default function ProjectDetailScreen() {
   const router = useRouter();
@@ -38,45 +36,23 @@ export default function ProjectDetailScreen() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [modal, setModal] = useState<{
-    visible: boolean;
-    title: string;
-    message: string;
-    type: 'success' | 'error' | 'info' | 'confirm';
-  }>({
-    visible: false,
-    title: '',
-    message: '',
-    type: 'info',
-  });
+  const { modal, setModal, showModal, hideModal } = useModal();
   const [recordingToDelete, setRecordingToDelete] = useState<Recording | null>(null);
   const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null);
   const [playableAudioUrl, setPlayableAudioUrl] = useState('');
 
-  // Config modal state
   const [configVisible, setConfigVisible] = useState(false);
-  const [configName, setConfigName] = useState('');
-  const [configDescription, setConfigDescription] = useState('');
-  const [configLlmProvider, setConfigLlmProvider] = useState<'openai' | 'gemini' | 'mistral'>('gemini');
-  const [configLlmModel, setConfigLlmModel] = useState('');
-  const [configLlmPrompt, setConfigLlmPrompt] = useState('');
-  const [configEnableLlm, setConfigEnableLlm] = useState(true);
-  const [configEnableAnon, setConfigEnableAnon] = useState(true);
-  const [configSensitiveWords, setConfigSensitiveWords] = useState('');
   const [configSaving, setConfigSaving] = useState(false);
 
-  // Reprocess prompt state
   const [reprocessVisible, setReprocessVisible] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
 
-  // Delete project state
   const [deleteProjectVisible, setDeleteProjectVisible] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
 
   const audioPlayer = useAudioPlayer(playableAudioUrl);
   const playerStatus = useAudioPlayerStatus(audioPlayer);
 
-  // Set local audio file URI when a recording is selected for playback
   useEffect(() => {
     if (!playingRecordingId) {
       setPlayableAudioUrl('');
@@ -90,7 +66,6 @@ export default function ProjectDetailScreen() {
     }
   }, [playingRecordingId, recordings]);
 
-  // Auto-play when a new audio URL is loaded
   useEffect(() => {
     if (playableAudioUrl && audioPlayer) {
       audioPlayer.play();
@@ -118,12 +93,7 @@ export default function ProjectDetailScreen() {
       setProject(data);
     } catch (error) {
       console.error('[ProjectDetailScreen] Error loading project:', error);
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to load project',
-        type: 'error',
-      });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to load project', 'error');
     } finally {
       setLoading(false);
     }
@@ -135,12 +105,7 @@ export default function ProjectDetailScreen() {
       setRecordings(data);
     } catch (error) {
       console.error('[ProjectDetailScreen] Error loading recordings:', error);
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to load recordings',
-        type: 'error',
-      });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to load recordings', 'error');
     } finally {
       setRefreshing(false);
     }
@@ -151,7 +116,6 @@ export default function ProjectDetailScreen() {
     loadProject();
   }, [id, loadProject]);
 
-  // Reload recordings every time the screen gains focus (e.g. after creating a new recording)
   useFocusEffect(
     useCallback(() => {
       console.log('[ProjectDetailScreen] Screen focused, reloading recordings');
@@ -160,37 +124,27 @@ export default function ProjectDetailScreen() {
   );
 
   const handleRefresh = () => {
-    console.log('ProjectDetailScreen: User triggered refresh');
     setRefreshing(true);
     loadRecordings();
   };
 
   const handleNewRecording = () => {
-    console.log('ProjectDetailScreen: User tapped New Recording button');
     router.push(`/recording/new?projectId=${id}`);
   };
 
   const handleRecordingPress = (recording: Recording) => {
-    console.log('ProjectDetailScreen: User tapped recording:', recording.id);
     if (!recording.id) {
-      setModal({
-        visible: true,
-        title: 'Invalid Recording',
-        message: 'This recording was not created properly. You can delete it by swiping left or using the delete button.',
-        type: 'error',
-      });
+      showModal('Invalid Recording', 'This recording was not created properly. You can delete it by swiping left or using the delete button.', 'error');
       return;
     }
     router.push(`/recording/${recording.id}`);
   };
 
   const handleExportCSV = async () => {
-    console.log('[ProjectDetailScreen] User tapped Export CSV button');
     try {
       const csvData = await exportProjectCSV(id!);
-      
+
       if (Platform.OS === 'web') {
-        // Web platform: Create a blob and trigger download
         try {
           const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
           const url = URL.createObjectURL(blob);
@@ -200,95 +154,53 @@ export default function ProjectDetailScreen() {
           link.style.display = 'none';
           document.body.appendChild(link);
           link.click();
-          
-          // Cleanup
           setTimeout(() => {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
           }, 100);
-          
-          setModal({
-            visible: true,
-            title: 'Export Complete',
-            message: 'CSV file has been downloaded',
-            type: 'success',
-          });
+          showModal('Export Complete', 'CSV file has been downloaded', 'success');
         } catch (downloadError) {
           throw new Error('Failed to trigger download: ' + (downloadError instanceof Error ? downloadError.message : 'Unknown error'));
         }
       } else {
-        // Mobile platforms: Use FileSystem and Sharing
         const fileUri = `${FileSystem.documentDirectory}project_${id}_export.csv`;
         await FileSystem.writeAsStringAsync(fileUri, csvData);
-        
-        // Share the file
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(fileUri);
         } else {
-          setModal({
-            visible: true,
-            title: 'Export Complete',
-            message: `CSV saved to: ${fileUri}`,
-            type: 'success',
-          });
+          showModal('Export Complete', `CSV saved to: ${fileUri}`, 'success');
         }
       }
     } catch (error) {
       console.error('[ProjectDetailScreen] Error exporting CSV:', error);
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to export CSV',
-        type: 'error',
-      });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to export CSV', 'error');
     }
   };
 
-  // ---- Config modal handlers ----
-
-  const openConfig = () => {
+  const handleSaveConfig = async (updates: ProjectConfigUpdate) => {
     if (!project) return;
-    setConfigName(project.name);
-    setConfigDescription(project.description || '');
-    setConfigLlmProvider(project.llmProvider);
-    setConfigLlmModel(project.llmModel);
-    setConfigLlmPrompt(project.llmPrompt);
-    setConfigEnableLlm(project.enableLlm);
-    setConfigEnableAnon(project.enableAnonymization);
-    setConfigSensitiveWords((project.sensitiveWords || []).join(', '));
-    setConfigVisible(true);
-  };
-
-  const handleSaveConfig = async () => {
-    if (!project) return;
-    if (!configName.trim()) {
-      setModal({ visible: true, title: 'Validation Error', message: 'Project name is required.', type: 'error' });
+    if (!updates.name.trim()) {
+      showModal('Validation Error', 'Project name is required.', 'error');
       return;
     }
     setConfigSaving(true);
     try {
-      const promptChanged = configLlmPrompt !== project.llmPrompt;
-      const llmToggleChanged = configEnableLlm !== project.enableLlm;
-      const providerChanged = configLlmProvider !== project.llmProvider;
-      const modelChanged = configLlmModel !== project.llmModel;
-
-      const sensitiveWords = configSensitiveWords
-        .split(',')
-        .map((w) => w.trim())
-        .filter((w) => w.length > 0);
+      const promptChanged = updates.llmPrompt !== project.llmPrompt;
+      const llmToggleChanged = updates.enableLlm !== project.enableLlm;
+      const providerChanged = updates.llmProvider !== project.llmProvider;
+      const modelChanged = updates.llmModel !== project.llmModel;
 
       await updateProject(project.id, {
-        name: configName,
-        description: configDescription || undefined,
-        llmProvider: configLlmProvider,
-        llmModel: configLlmModel,
-        llmPrompt: configLlmPrompt,
-        enableLlm: configEnableLlm,
-        enableAnonymization: configEnableAnon,
-        sensitiveWords,
+        name: updates.name,
+        description: updates.description,
+        llmProvider: updates.llmProvider,
+        llmModel: updates.llmModel,
+        llmPrompt: updates.llmPrompt,
+        enableLlm: updates.enableLlm,
+        enableAnonymization: updates.enableAnonymization,
+        sensitiveWords: updates.sensitiveWords,
       });
 
-      // If LLM prompt/provider/model changed, mark done recordings as stale
       if (promptChanged || llmToggleChanged || providerChanged || modelChanged) {
         const doneRecordings = recordings.filter((r) => r.status === 'done');
         for (const rec of doneRecordings) {
@@ -300,15 +212,14 @@ export default function ProjectDetailScreen() {
       await loadProject();
       setConfigVisible(false);
 
-      // If prompt changed and there are affected recordings, offer reprocessing
       if ((promptChanged || llmToggleChanged || providerChanged || modelChanged) && recordings.some((r) => r.status === 'done' || r.status === 'stale')) {
         setReprocessVisible(true);
       } else {
-        setModal({ visible: true, title: 'Saved', message: 'Project settings updated.', type: 'success' });
+        showModal('Saved', 'Project settings updated.', 'success');
       }
     } catch (error) {
       console.error('[ProjectDetailScreen] Error saving config:', error);
-      setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to save settings', type: 'error' });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to save settings', 'error');
     } finally {
       setConfigSaving(false);
     }
@@ -327,9 +238,9 @@ export default function ProjectDetailScreen() {
       }
       await loadRecordings();
       setReprocessVisible(false);
-      setModal({ visible: true, title: 'Done', message: `Reprocessed ${staleRecordings.length} recording(s).`, type: 'success' });
+      showModal('Done', `Reprocessed ${staleRecordings.length} recording(s).`, 'success');
     } catch (error) {
-      setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to reprocess', type: 'error' });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to reprocess', 'error');
     } finally {
       setReprocessing(false);
     }
@@ -338,7 +249,6 @@ export default function ProjectDetailScreen() {
   const handleDeleteProject = async () => {
     setDeletingProject(true);
     try {
-      // Delete all recordings first
       for (const rec of recordings) {
         try {
           await deleteRecording(rec.id);
@@ -353,7 +263,7 @@ export default function ProjectDetailScreen() {
     } catch (error) {
       console.error('[ProjectDetailScreen] Error deleting project:', error);
       setDeletingProject(false);
-      setModal({ visible: true, title: 'Error', message: error instanceof Error ? error.message : 'Failed to delete project', type: 'error' });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to delete project', 'error');
     }
   };
 
@@ -379,19 +289,16 @@ export default function ProjectDetailScreen() {
   const confirmDeleteRecording = async () => {
     if (!recordingToDelete) return;
     const toDelete = recordingToDelete;
-    // Close the confirm modal immediately
-    setModal((prev) => ({ ...prev, visible: false }));
+    hideModal();
     setRecordingToDelete(null);
     try {
       if (toDelete.id) {
         await deleteRecording(toDelete.id);
       }
-      // Remove from local state regardless (handles recordings with undefined IDs)
       setRecordings((prev) => {
         if (toDelete.id) {
           return prev.filter((r) => r.id !== toDelete.id);
         }
-        // For recordings without an ID, remove by reference equality
         const idx = prev.indexOf(toDelete);
         if (idx !== -1) {
           const next = [...prev];
@@ -402,7 +309,6 @@ export default function ProjectDetailScreen() {
       });
     } catch (error) {
       console.error('[ProjectDetailScreen] Error deleting recording:', error);
-      // Even if the API call fails, still remove from local state if the recording has no ID
       if (!toDelete.id) {
         setRecordings((prev) => {
           const idx = prev.indexOf(toDelete);
@@ -415,186 +321,19 @@ export default function ProjectDetailScreen() {
         });
         return;
       }
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to delete recording',
-        type: 'error',
-      });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to delete recording', 'error');
     }
   };
 
-  const getStatusColor = (status: Recording['status']) => {
-    const statusColors: Record<Recording['status'], string> = {
-      pending: colors.statusPending,
-      transcribing: colors.statusTranscribing,
-      anonymizing: colors.statusAnonymizing,
-      processing: colors.statusProcessing,
-      done: colors.statusDone,
-      stale: colors.statusStale,
-      error: colors.statusError,
-    };
-    return statusColors[status];
-  };
-
-  const getStatusLabel = (status: Recording['status']) => {
-    const labels: Record<Recording['status'], string> = {
-      pending: 'Pending',
-      transcribing: 'Transcribing',
-      anonymizing: 'Anonymizing',
-      processing: 'Processing',
-      done: 'Done',
-      stale: 'Stale',
-      error: 'Error',
-    };
-    return labels[status];
-  };
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    const minsText = `${mins}m`;
-    const secsText = `${secs}s`;
-    return `${minsText} ${secsText}`;
-  };
-
-  const RightAction = ({
-    item,
-    drag,
-  }: {
-    item: Recording;
-    drag: SharedValue<number>;
-  }) => {
-    const styleAnimation = useAnimatedStyle(() => ({
-      transform: [{ translateX: drag.value + 80 }],
-    }));
-
-    return (
-      <Pressable onPress={() => handleDeleteRecording(item)}>
-        <Reanimated.View style={[styleAnimation, styles.swipeDeleteAction]}>
-          <IconSymbol
-            ios_icon_name="trash.fill"
-            android_material_icon_name="delete"
-            size={24}
-            color="#FFFFFF"
-          />
-        </Reanimated.View>
-      </Pressable>
-    );
-  };
-
-  const RecordingCardContent = ({ item }: { item: Recording }) => {
-    const statusColor = getStatusColor(item.status);
-    const statusLabel = getStatusLabel(item.status);
-    const durationText = item.audioDuration ? formatDuration(item.audioDuration) : 'N/A';
-    const dateText = item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Unknown';
-    const needsAttention = item.status === 'error' || (item.status === 'pending' && !item.audioPath);
-    const isThisPlaying = playingRecordingId === item.id && playerStatus?.playing;
-
-    return (
-      <TouchableOpacity
-        style={styles.recordingCard}
-        onPress={() => handleRecordingPress(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.recordingHeader}>
-          <View style={styles.recordingHeaderLeft}>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-              <Text style={styles.statusText}>{statusLabel}</Text>
-            </View>
-            {needsAttention && (
-              <IconSymbol
-                ios_icon_name="exclamationmark.circle.fill"
-                android_material_icon_name="error"
-                size={20}
-                color={colors.statusError}
-              />
-            )}
-          </View>
-          <View style={styles.recordingHeaderRight}>
-            {Platform.OS === 'web' && (
-              <Pressable
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleDeleteRecording(item);
-                }}
-                style={styles.webDeleteButton}
-              >
-                <IconSymbol
-                  ios_icon_name="trash.fill"
-                  android_material_icon_name="delete"
-                  size={18}
-                  color={colors.statusError}
-                />
-              </Pressable>
-            )}
-            <Text style={styles.recordingDate}>{dateText}</Text>
-          </View>
-        </View>
-
-        <View style={styles.recordingMeta}>
-          {item.audioPath && item.id && (
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                handlePlayPause(item);
-              }}
-              style={styles.inlinePlayButton}
-            >
-              <IconSymbol
-                ios_icon_name={isThisPlaying ? 'pause.fill' : 'play.fill'}
-                android_material_icon_name={isThisPlaying ? 'pause' : 'play-arrow'}
-                size={18}
-                color="#FFFFFF"
-              />
-            </Pressable>
-          )}
-          <View style={styles.metaItem}>
-            <IconSymbol
-              ios_icon_name="clock.fill"
-              android_material_icon_name="access-time"
-              size={16}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.metaText}>{durationText}</Text>
-          </View>
-        </View>
-
-        {item.llmOutput && (
-          <Text style={styles.recordingPreview} numberOfLines={2}>
-            {item.llmOutput}
-          </Text>
-        )}
-
-        {needsAttention && !item.audioPath && (
-          <Text style={styles.recordingWarning}>
-            Audio upload required
-          </Text>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  const renderRecording = ({ item }: { item: Recording }) => {
-    // On web, skip ReanimatedSwipeable to avoid SwipeDirection crash
-    if (Platform.OS === 'web') {
-      return <RecordingCardContent item={item} />;
-    }
-
-    return (
-      <ReanimatedSwipeable
-        friction={2}
-        enableTrackpadTwoFingerGesture
-        rightThreshold={40}
-        renderRightActions={(_prog, drag) => (
-          <RightAction item={item} drag={drag} />
-        )}
-        overshootRight={false}
-      >
-        <RecordingCardContent item={item} />
-      </ReanimatedSwipeable>
-    );
-  };
+  const renderRecording = ({ item }: { item: Recording }) => (
+    <RecordingCard
+      recording={item}
+      isPlaying={playingRecordingId === item.id && !!playerStatus?.playing}
+      onPress={handleRecordingPress}
+      onDelete={handleDeleteRecording}
+      onPlayPause={handlePlayPause}
+    />
+  );
 
   const emptyComponent = () => (
     <View style={styles.emptyContainer}>
@@ -621,7 +360,7 @@ export default function ProjectDetailScreen() {
           title: projectName,
           headerBackTitle: 'Back',
           headerRight: () => (
-            <Pressable onPress={openConfig} style={{ padding: 8 }}>
+            <Pressable onPress={() => setConfigVisible(true)} style={{ padding: 8 }}>
               <IconSymbol
                 ios_icon_name="gearshape.fill"
                 android_material_icon_name="settings"
@@ -686,14 +425,13 @@ export default function ProjectDetailScreen() {
         message={modal.message}
         type={modal.type}
         onClose={() => {
-          setModal({ ...modal, visible: false });
+          hideModal();
           setRecordingToDelete(null);
         }}
         onConfirm={modal.type === 'confirm' ? confirmDeleteRecording : undefined}
         confirmText={modal.type === 'confirm' ? 'Delete' : 'OK'}
       />
 
-      {/* Reprocess confirmation modal */}
       <Modal
         visible={reprocessVisible}
         title="Reprocess Recordings?"
@@ -705,7 +443,6 @@ export default function ProjectDetailScreen() {
         cancelText="Skip"
       />
 
-      {/* Delete project confirmation modal */}
       <Modal
         visible={deleteProjectVisible}
         title="Delete Project"
@@ -717,174 +454,15 @@ export default function ProjectDetailScreen() {
         cancelText="Cancel"
       />
 
-      {/* Project config modal */}
-      {configVisible && (
-        <View style={StyleSheet.absoluteFill}>
-          <View style={configStyles.overlay}>
-            <SafeAreaView style={configStyles.container} edges={['top', 'bottom']}>
-              <View style={configStyles.header}>
-                <TouchableOpacity onPress={() => setConfigVisible(false)} style={configStyles.headerButton}>
-                  <Text style={configStyles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <Text style={configStyles.headerTitle}>Project Settings</Text>
-                <TouchableOpacity
-                  onPress={handleSaveConfig}
-                  style={configStyles.headerButton}
-                  disabled={configSaving}
-                >
-                  <Text style={[configStyles.saveText, configSaving && { opacity: 0.5 }]}>
-                    {configSaving ? 'Saving...' : 'Save'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={configStyles.body} contentContainerStyle={configStyles.bodyContent}>
-                {/* Name */}
-                <Text style={configStyles.label}>Project Name</Text>
-                <TextInput
-                  style={configStyles.input}
-                  value={configName}
-                  onChangeText={setConfigName}
-                  placeholder="Enter project name"
-                  placeholderTextColor={colors.textSecondary}
-                />
-
-                {/* Description */}
-                <Text style={configStyles.label}>Description</Text>
-                <TextInput
-                  style={[configStyles.input, configStyles.multiline]}
-                  value={configDescription}
-                  onChangeText={setConfigDescription}
-                  placeholder="Optional description"
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  numberOfLines={3}
-                />
-
-                {/* Enable LLM */}
-                <View style={configStyles.switchRow}>
-                  <Text style={configStyles.label}>Enable LLM Processing</Text>
-                  <Switch
-                    value={configEnableLlm}
-                    onValueChange={setConfigEnableLlm}
-                    trackColor={{ false: colors.border, true: colors.primary }}
-                  />
-                </View>
-                <Text style={configStyles.hint}>
-                  When disabled, recordings are transcribed only — no anonymization or LLM analysis.
-                </Text>
-
-                {configEnableLlm && (
-                  <>
-                    {/* LLM Provider */}
-                    <Text style={configStyles.label}>LLM Provider</Text>
-                    <View style={configStyles.providerRow}>
-                      {(Object.keys(LLM_PROVIDERS) as Array<keyof typeof LLM_PROVIDERS>).map((key) => (
-                        <TouchableOpacity
-                          key={key}
-                          style={[
-                            configStyles.providerChip,
-                            configLlmProvider === key && configStyles.providerChipActive,
-                          ]}
-                          onPress={() => {
-                            setConfigLlmProvider(key as 'openai' | 'gemini' | 'mistral');
-                            setConfigLlmModel(LLM_PROVIDERS[key].models[0].id);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              configStyles.providerChipText,
-                              configLlmProvider === key && configStyles.providerChipTextActive,
-                            ]}
-                          >
-                            {LLM_PROVIDERS[key].name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    {/* LLM Model */}
-                    <Text style={configStyles.label}>Model</Text>
-                    <View style={configStyles.providerRow}>
-                      {LLM_PROVIDERS[configLlmProvider].models.map((m) => (
-                        <TouchableOpacity
-                          key={m.id}
-                          style={[
-                            configStyles.providerChip,
-                            configLlmModel === m.id && configStyles.providerChipActive,
-                          ]}
-                          onPress={() => setConfigLlmModel(m.id)}
-                        >
-                          <Text
-                            style={[
-                              configStyles.providerChipText,
-                              configLlmModel === m.id && configStyles.providerChipTextActive,
-                            ]}
-                          >
-                            {m.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    {/* LLM Prompt */}
-                    <Text style={configStyles.label}>LLM Prompt</Text>
-                    <TextInput
-                      style={[configStyles.input, configStyles.multiline, { minHeight: 100 }]}
-                      value={configLlmPrompt}
-                      onChangeText={setConfigLlmPrompt}
-                      placeholder="Enter prompt for LLM processing"
-                      placeholderTextColor={colors.textSecondary}
-                      multiline
-                      numberOfLines={5}
-                    />
-
-                    {/* Enable Anonymization */}
-                    <View style={configStyles.switchRow}>
-                      <Text style={configStyles.label}>Enable Anonymization</Text>
-                      <Switch
-                        value={configEnableAnon}
-                        onValueChange={setConfigEnableAnon}
-                        trackColor={{ false: colors.border, true: colors.primary }}
-                      />
-                    </View>
-
-                    {/* Sensitive Words */}
-                    <Text style={configStyles.label}>Sensitive Words</Text>
-                    <TextInput
-                      style={configStyles.input}
-                      value={configSensitiveWords}
-                      onChangeText={setConfigSensitiveWords}
-                      placeholder="Comma-separated words to anonymize"
-                      placeholderTextColor={colors.textSecondary}
-                    />
-                    <Text style={configStyles.hint}>
-                      These words will always be anonymized regardless of PII detection.
-                    </Text>
-                  </>
-                )}
-
-                {/* Delete Project */}
-                <View style={configStyles.dangerSection}>
-                  <Text style={configStyles.dangerTitle}>Danger Zone</Text>
-                  <TouchableOpacity
-                    style={configStyles.deleteButton}
-                    onPress={() => setDeleteProjectVisible(true)}
-                    activeOpacity={0.7}
-                  >
-                    <IconSymbol
-                      ios_icon_name="trash.fill"
-                      android_material_icon_name="delete"
-                      size={20}
-                      color="#FFFFFF"
-                    />
-                    <Text style={configStyles.deleteButtonText}>Delete Project</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </SafeAreaView>
-          </View>
-        </View>
+      {project && (
+        <ProjectConfigModal
+          visible={configVisible}
+          project={project}
+          saving={configSaving}
+          onClose={() => setConfigVisible(false)}
+          onSave={handleSaveConfig}
+          onDeleteProject={() => setDeleteProjectVisible(true)}
+        />
       )}
     </SafeAreaView>
   );
@@ -926,84 +504,6 @@ const styles = StyleSheet.create({
     padding: 16,
     flexGrow: 1,
   },
-  recordingCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  recordingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  recordingHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  recordingHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  webDeleteButton: {
-    padding: 4,
-    borderRadius: 4,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  recordingDate: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  recordingMeta: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
-  },
-  inlinePlayButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metaText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  recordingPreview: {
-    fontSize: 14,
-    color: colors.text,
-    lineHeight: 20,
-  },
-  recordingWarning: {
-    fontSize: 13,
-    color: colors.statusError,
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
@@ -1023,141 +523,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
-  },
-  swipeDeleteAction: {
-    width: 80,
-    height: '100%',
-    backgroundColor: colors.statusError,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-  },
-});
-
-const configStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  headerButton: {
-    minWidth: 60,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  cancelText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
-  saveText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
-    textAlign: 'right',
-  },
-  body: {
-    flex: 1,
-  },
-  bodyContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 6,
-    marginTop: 16,
-  },
-  hint: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  input: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-    fontSize: 15,
-    color: colors.text,
-  },
-  multiline: {
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 16,
-    marginBottom: 0,
-  },
-  providerRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  providerChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  providerChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  providerChipText: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  providerChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  dangerSection: {
-    marginTop: 40,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  dangerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.statusError,
-    marginBottom: 12,
-  },
-  deleteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.statusError,
-    borderRadius: 8,
-    paddingVertical: 12,
-  },
-  deleteButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 });

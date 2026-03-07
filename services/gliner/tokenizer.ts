@@ -53,14 +53,6 @@ export function getClsTokenId(): number {
   return _tokenizer.clsTokenId;
 }
 
-/**
- * Get the [SEP] token ID.
- */
-export function getSepTokenId(): number {
-  if (!_tokenizer) throw new Error('Tokenizer not initialized');
-  return _tokenizer.sepTokenId;
-}
-
 // =====================================================================
 // Unigram (SentencePiece) Tokenizer — used by mDeBERTa-v3 models
 // =====================================================================

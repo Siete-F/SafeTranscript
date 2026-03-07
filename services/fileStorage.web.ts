@@ -60,6 +60,8 @@ export interface RecordingMeta {
   audioPath?: string;
   audioDuration?: number;
   customFieldValues: Record<string, any>;
+  transcriptionSource?: string;
+  speakerMap?: Record<string, string>;
   piiMappings?: Record<string, string>;
   errorMessage?: string;
   createdAt: string;

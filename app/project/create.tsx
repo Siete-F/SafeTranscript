@@ -16,6 +16,7 @@ import { colors, commonStyles } from '@/styles/commonStyles';
 import { LLM_PROVIDERS, CustomField } from '@/types';
 import { createProject } from '@/db/operations/projects';
 import { Modal } from '@/components/ui/Modal';
+import { useModal } from '@/hooks/useModal';
 
 export default function CreateProjectScreen() {
   const router = useRouter();
@@ -29,36 +30,16 @@ export default function CreateProjectScreen() {
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [sensitiveWordsText, setSensitiveWordsText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [modal, setModal] = useState<{
-    visible: boolean;
-    title: string;
-    message: string;
-    type: 'success' | 'error';
-  }>({
-    visible: false,
-    title: '',
-    message: '',
-    type: 'success',
-  });
+  const { modal, showModal, hideModal } = useModal();
 
   const handleSave = async () => {
     if (!name.trim()) {
-      setModal({
-        visible: true,
-        title: 'Validation Error',
-        message: 'Please enter a project name',
-        type: 'error',
-      });
+      showModal('Validation Error', 'Please enter a project name', 'error');
       return;
     }
 
     if (enableLlm && !llmPrompt.trim()) {
-      setModal({
-        visible: true,
-        title: 'Validation Error',
-        message: 'Please enter an LLM prompt',
-        type: 'error',
-      });
+      showModal('Validation Error', 'Please enter an LLM prompt', 'error');
       return;
     }
 
@@ -82,26 +63,14 @@ export default function CreateProjectScreen() {
       };
       
       await createProject(projectData);
-
-      setModal({
-        visible: true,
-        title: 'Success',
-        message: 'Project created successfully',
-        type: 'success',
-      });
+      showModal('Success', 'Project created successfully', 'success');
       
-      // Navigate back after a short delay
       setTimeout(() => {
         router.back();
       }, 1000);
     } catch (error) {
       console.error('[CreateProjectScreen] Error creating project:', error);
-      setModal({
-        visible: true,
-        title: 'Error',
-        message: error instanceof Error ? error.message : 'Failed to create project',
-        type: 'error',
-      });
+      showModal('Error', error instanceof Error ? error.message : 'Failed to create project', 'error');
     } finally {
       setLoading(false);
     }
@@ -375,7 +344,7 @@ export default function CreateProjectScreen() {
         title={modal.title}
         message={modal.message}
         type={modal.type}
-        onClose={() => setModal({ ...modal, visible: false })}
+        onClose={hideModal}
       />
     </SafeAreaView>
   );

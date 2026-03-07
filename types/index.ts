@@ -1,3 +1,5 @@
+export type { TranscriptionSegment } from '@/services/transcription';
+import type { TranscriptionSegment } from '@/services/transcription';
 
 export interface Project {
   id: string;
@@ -32,18 +34,14 @@ export interface Recording {
   transcription?: string;
   transcriptionData?: TranscriptionSegment[];
   transcriptionSource?: TranscriptionSource;
+  /** Maps raw speaker IDs (e.g. "speaker_0") to user-assigned display names */
+  speakerMap?: Record<string, string>;
   anonymizedTranscription?: string;
   piiMappings?: Record<string, string>;
   llmOutput?: string;
   errorMessage?: string;
   createdAt: string;
   updatedAt?: string;
-}
-
-export interface TranscriptionSegment {
-  speaker: string;
-  timestamp: number;
-  text: string;
 }
 
 export interface ApiKeys {

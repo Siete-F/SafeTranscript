@@ -1,5 +1,4 @@
 import { getRecordingsByProject } from './recordings';
-import { getProjectById } from './projects';
 
 /** Export completed recordings as a CSV string */
 export async function exportProjectCSV(projectId: string): Promise<string> {
@@ -56,34 +55,6 @@ export async function exportProjectCSV(projectId: string): Promise<string> {
   });
 
   return csvLines.join('\n');
-}
-
-/** Export completed recordings as a JSON object */
-export async function exportProjectJSON(projectId: string): Promise<any> {
-  const recordings = await getRecordingsByProject(projectId);
-  const doneRecordings = recordings.filter((r) => r.status === 'done');
-  const project = await getProjectById(projectId);
-
-  return {
-    project: {
-      id: project?.id,
-      name: project?.name,
-      description: project?.description,
-      llmProvider: project?.llmProvider,
-      llmModel: project?.llmModel,
-      exportDate: new Date().toISOString(),
-    },
-    recordingCount: doneRecordings.length,
-    recordings: doneRecordings.map((recording) => ({
-      id: recording.id,
-      createdAt: recording.createdAt,
-      updatedAt: recording.updatedAt,
-      customFieldValues: recording.customFieldValues,
-      transcription: recording.transcription,
-      anonymizedTranscription: recording.anonymizedTranscription,
-      llmOutput: recording.llmOutput,
-    })),
-  };
 }
 
 function escapeCSVLine(values: string[]): string {

@@ -4,7 +4,7 @@
  *
  * Transcription routing:
  *   1. If local Whisper model is downloaded → local transcription
- *      (non-WAV audio like M4A is auto-converted to WAV via FFmpeg)
+ *      (non-WAV audio like M4A is auto-converted to WAV via native Expo module)
  *   2. Otherwise → Mistral Voxtral API (requires API key)
  */
 import { Platform } from 'react-native';
@@ -96,14 +96,30 @@ export async function runProcessingPipeline(
         transcriptionSource = 'voxtral-api';
       }
 
+      // Build default speaker map from unique speaker IDs
+      const seenSpeakers = new Set<string>();
+      const uniqueSpeakers: string[] = [];
+      for (const seg of transcriptionData.segments) {
+        if (!seenSpeakers.has(seg.speaker)) {
+          seenSpeakers.add(seg.speaker);
+          uniqueSpeakers.push(seg.speaker);
+        }
+      }
+      let speakerMap: Record<string, string> | undefined;
+      if (uniqueSpeakers.length > 1) {
+        speakerMap = {};
+        uniqueSpeakers.forEach((id, i) => { speakerMap![id] = `Speaker ${i + 1}`; });
+      }
+
       await updateRecording(recordingId, {
         transcription: transcriptionData.fullText,
         transcriptionData: transcriptionData.segments,
         transcriptionSource,
+        ...(speakerMap && { speakerMap }),
       });
 
       transcriptionText = transcriptionData.fullText;
-      console.log(`[Pipeline] Transcription done (${transcriptionSource}): ${transcriptionData.segments.length} segments`);
+      console.log(`[Pipeline] Transcription done (${transcriptionSource}): ${transcriptionData.segments.length} segments, ${uniqueSpeakers.length} speakers`);
     }
 
     // Step 2: Anonymize (if enabled AND LLM is enabled)

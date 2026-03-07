@@ -109,30 +109,3 @@ async function callMistral(prompt: string, model: string, apiKey?: string): Prom
   const data = await response.json();
   return data.choices?.[0]?.message?.content || '';
 }
-
-export const AVAILABLE_MODELS = {
-  openai: ['gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
-  gemini: ['gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-  mistral: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'],
-};
-
-export function validateModel(provider: string, model: string): boolean {
-  const models = AVAILABLE_MODELS[provider as keyof typeof AVAILABLE_MODELS];
-  return models ? models.includes(model) : false;
-}
-
-export function getProviderFromModel(model: string): string {
-  if (model.startsWith('gpt-') || model.startsWith('text-')) return 'openai';
-  if (model.startsWith('gemini-')) return 'gemini';
-  if (model.startsWith('mistral-')) return 'mistral';
-  return 'openai';
-}
-
-export function hasApiKeysForProvider(apiKeys: ApiKeyRecord, provider: string): boolean {
-  switch (provider) {
-    case 'openai': return !!apiKeys.openaiKey;
-    case 'gemini': return !!apiKeys.geminiKey;
-    case 'mistral': return !!apiKeys.mistralKey;
-    default: return false;
-  }
-}

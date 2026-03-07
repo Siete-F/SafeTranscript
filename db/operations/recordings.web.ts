@@ -21,6 +21,7 @@ function toRecording(row: typeof schema.recordings.$inferSelect): Recording {
     customFieldValues: row.customFieldValues ? JSON.parse(row.customFieldValues) : {},
     transcription: row.transcription ?? undefined,
     transcriptionData: row.transcriptionData ? JSON.parse(row.transcriptionData) : undefined,
+    speakerMap: row.speakerMap ? JSON.parse(row.speakerMap) : undefined,
     anonymizedTranscription: row.anonymizedTranscription ?? undefined,
     piiMappings: row.piiMappings ? JSON.parse(row.piiMappings) : undefined,
     llmOutput: row.llmOutput ?? undefined,
@@ -94,6 +95,8 @@ export async function updateRecording(
     customFieldValues: Record<string, any>;
     transcription: string;
     transcriptionData: any[];
+    transcriptionSource: string;
+    speakerMap: Record<string, string>;
     anonymizedTranscription: string;
     piiMappings: Record<string, string>;
     llmOutput: string;
@@ -112,6 +115,7 @@ export async function updateRecording(
   if (data.piiMappings !== undefined) updates.piiMappings = JSON.stringify(data.piiMappings);
   if (data.llmOutput !== undefined) updates.llmOutput = data.llmOutput;
   if (data.errorMessage !== undefined) updates.errorMessage = data.errorMessage;
+  if (data.speakerMap !== undefined) updates.speakerMap = JSON.stringify(data.speakerMap);
 
   await db.update(schema.recordings).set(updates).where(eq(schema.recordings.id, id));
 }
