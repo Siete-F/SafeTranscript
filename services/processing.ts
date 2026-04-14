@@ -11,8 +11,12 @@ import { Platform } from 'react-native';
 import { getRecordingById, updateRecording } from '@/db/operations/recordings';
 import { getProjectById } from '@/db/operations/projects';
 import { getApiKeys } from '@/db/operations/apikeys';
+import {
+  getSelfHostedTranscriptionUrl,
+  getSelfHostedTranscriptionToken,
+} from '@/db/operations/settings';
 import { getAudioFileUri } from './audioStorage';
-import { processTranscription } from './transcription';
+import { processTranscription, transcribeWithSelfHosted } from './transcription';
 import { anonymizeTranscription, reversePIIMappings } from './anonymization';
 import { processWithLLM } from './llm';
 import { isWavExtension } from './whisper/audioUtils';
@@ -21,8 +25,10 @@ import { transcribeWithWhisper, isWhisperAvailable } from './whisper/whisperInfe
 interface PipelineOptions {
   /** Skip transcription and re-use the existing transcription text. */
   skipTranscription?: boolean;
-  /** Force transcription via the Mistral Voxtral API, even if local Whisper is available. */
+  /** Force transcription via the Mistral Voxtral API, even if local Whisper or self-hosted is available. */
   forceVoxtralApi?: boolean;
+  /** Force transcription via the self-hosted endpoint, even if local Whisper is available. */
+  forceSelfHosted?: boolean;
 }
 
 /**
@@ -69,23 +75,35 @@ export async function runProcessingPipeline(
 
       const audioUri = getAudioFileUri(recording.audioPath);
 
-      // Determine transcription method: local Whisper vs. remote API
-      const useLocalWhisper = !options?.forceVoxtralApi && await shouldUseLocalWhisper(audioUri);
+      // Determine transcription method: local Whisper → self-hosted → Mistral cloud API
+      const useLocalWhisper = !options?.forceVoxtralApi && !options?.forceSelfHosted && await shouldUseLocalWhisper(audioUri);
 
       let transcriptionData;
-      let transcriptionSource: 'whisper' | 'voxtral-api';
+      let transcriptionSource: 'whisper' | 'voxtral-api' | 'self-hosted';
 
       if (useLocalWhisper) {
         console.log('[Pipeline] Using LOCAL Whisper model for transcription');
         transcriptionData = await transcribeWithWhisper(audioUri, 'nl');
         transcriptionSource = 'whisper';
+      } else if (!options?.forceVoxtralApi && await shouldUseSelfHosted()) {
+        console.log('[Pipeline] Using SELF-HOSTED endpoint for transcription');
+        const selfHostedUrl = await getSelfHostedTranscriptionUrl();
+        const selfHostedToken = await getSelfHostedTranscriptionToken();
+        transcriptionData = await transcribeWithSelfHosted(
+          audioUri,
+          selfHostedUrl!,
+          selfHostedToken ?? undefined,
+          project.sensitiveWords,
+        );
+        transcriptionSource = 'self-hosted';
       } else {
         console.log('[Pipeline] Using Mistral API for transcription');
         const mistralKey = apiKeysRecord.mistralKey;
         if (!mistralKey) {
           throw new Error(
-            'No transcription method available. Either download the Whisper model in Settings ' +
-            'for local transcription, or add a Mistral API key for cloud transcription.',
+            'No transcription method available. Options: (1) download the Whisper model in Settings ' +
+            'for local transcription, (2) configure a self-hosted endpoint in Settings, or ' +
+            '(3) add a Mistral API key for cloud transcription.',
           );
         }
         transcriptionData = await processTranscription(
@@ -212,6 +230,20 @@ async function shouldUseLocalWhisper(audioUri: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.warn('[Pipeline] Error checking local Whisper availability:', error);
+    return false;
+  }
+}
+
+/**
+ * Determine if the self-hosted transcription endpoint should be used.
+ * Returns true when a non-empty endpoint URL is saved in settings.
+ */
+async function shouldUseSelfHosted(): Promise<boolean> {
+  try {
+    const url = await getSelfHostedTranscriptionUrl();
+    return !!url && url.trim().length > 0;
+  } catch (error) {
+    console.warn('[Pipeline] Error checking self-hosted availability:', error);
     return false;
   }
 }

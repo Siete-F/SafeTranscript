@@ -31,8 +31,10 @@ interface TranscriptionCardProps {
   anonymizedTranscription?: string;
   piiMappings?: Record<string, string>;
   hasMistralKey: boolean;
+  hasSelfHostedUrl: boolean;
   retranscribing: boolean;
   onRetranscribe: () => void;
+  onRetranscribeSelfHosted: () => void;
   onSpeakerRename?: (speakerId: string, newName: string) => void;
 }
 
@@ -119,8 +121,10 @@ export function TranscriptionCard({
   anonymizedTranscription,
   piiMappings,
   hasMistralKey,
+  hasSelfHostedUrl,
   retranscribing,
   onRetranscribe,
+  onRetranscribeSelfHosted,
   onSpeakerRename,
 }: TranscriptionCardProps) {
   const [showAnonymizedPayload, setShowAnonymizedPayload] = useState(false);
@@ -167,6 +171,9 @@ export function TranscriptionCard({
           )}
           {transcriptionSource === 'voxtral-api' && (
             <Text style={styles.sourceBadge}> (Voxtral)</Text>
+          )}
+          {transcriptionSource === 'self-hosted' && (
+            <Text style={styles.sourceBadge}> (Self-Hosted)</Text>
           )}
         </Text>
         {anonymizedTranscription && (
@@ -273,35 +280,59 @@ export function TranscriptionCard({
       )}
 
       {transcriptionSource === 'whisper' && (
-        <TouchableOpacity
-          style={[
-            styles.retranscribeButton,
-            !hasMistralKey && styles.retranscribeButtonDisabled,
-          ]}
-          onPress={onRetranscribe}
-          disabled={!hasMistralKey || retranscribing}
-          activeOpacity={0.7}
-        >
-          {retranscribing ? (
-            <ActivityIndicator size="small" color={hasMistralKey ? colors.card : colors.textSecondary} />
-          ) : (
-            <IconSymbol
-              ios_icon_name="arrow.triangle.2.circlepath"
-              android_material_icon_name="sync"
-              size={16}
-              color={hasMistralKey ? colors.card : colors.textSecondary}
-            />
+        <View style={styles.retranscribeRow}>
+          <TouchableOpacity
+            style={[
+              styles.retranscribeButton,
+              styles.retranscribeButtonFlex,
+              !hasMistralKey && styles.retranscribeButtonDisabled,
+            ]}
+            onPress={onRetranscribe}
+            disabled={!hasMistralKey || retranscribing}
+            activeOpacity={0.7}
+          >
+            {retranscribing ? (
+              <ActivityIndicator size="small" color={hasMistralKey ? colors.card : colors.textSecondary} />
+            ) : (
+              <IconSymbol
+                ios_icon_name="arrow.triangle.2.circlepath"
+                android_material_icon_name="sync"
+                size={16}
+                color={hasMistralKey ? colors.card : colors.textSecondary}
+              />
+            )}
+            <Text style={[
+              styles.retranscribeButtonText,
+              !hasMistralKey && styles.retranscribeButtonTextDisabled,
+            ]}>
+              {retranscribing ? 'Re-transcribing…' : 'Voxtral API'}
+            </Text>
+            {!hasMistralKey && (
+              <Text style={styles.retranscribeHint}>Key required</Text>
+            )}
+          </TouchableOpacity>
+
+          {hasSelfHostedUrl && (
+            <TouchableOpacity
+              style={[styles.retranscribeButton, styles.retranscribeButtonFlex, styles.retranscribeButtonSelfHosted]}
+              onPress={onRetranscribeSelfHosted}
+              disabled={retranscribing}
+              activeOpacity={0.7}
+            >
+              {retranscribing ? (
+                <ActivityIndicator size="small" color={colors.card} />
+              ) : (
+                <IconSymbol
+                  ios_icon_name="server.rack"
+                  android_material_icon_name="dns"
+                  size={16}
+                  color={colors.card}
+                />
+              )}
+              <Text style={styles.retranscribeButtonText}>Self-Hosted</Text>
+            </TouchableOpacity>
           )}
-          <Text style={[
-            styles.retranscribeButtonText,
-            !hasMistralKey && styles.retranscribeButtonTextDisabled,
-          ]}>
-            {retranscribing ? 'Re-transcribing…' : 'Re-transcribe with Voxtral API'}
-          </Text>
-          {!hasMistralKey && (
-            <Text style={styles.retranscribeHint}>Mistral API key required</Text>
-          )}
-        </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -449,6 +480,11 @@ const styles = StyleSheet.create({
   },
 
   // Retranscribe button
+  retranscribeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 14,
+  },
   retranscribeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -456,15 +492,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     borderRadius: 10,
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginTop: 14,
-    gap: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  retranscribeButtonFlex: {
+    flex: 1,
+  },
+  retranscribeButtonSelfHosted: {
+    backgroundColor: colors.secondary,
   },
   retranscribeButtonDisabled: {
     backgroundColor: `${colors.border}80`,
   },
   retranscribeButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.card,
   },

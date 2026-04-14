@@ -11,6 +11,7 @@ import { colors, commonStyles } from '@/styles/commonStyles';
 import { Modal } from '@/components/ui/Modal';
 import { ApiKeysSection } from '@/components/settings/ApiKeysSection';
 import { WhisperModelSection } from '@/components/settings/WhisperModelSection';
+import { SelfHostedTranscriptionSection } from '@/components/settings/SelfHostedTranscriptionSection';
 import { PiiModelSection } from '@/components/settings/PiiModelSection';
 import { StorageSection } from '@/components/settings/StorageSection';
 import { useModal } from '@/hooks/useModal';
@@ -29,6 +30,7 @@ export default function SettingsScreen() {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <ApiKeysSection showModal={showModal} />
         <WhisperModelSection showModal={showModal} />
+        <SelfHostedTranscriptionSection showModal={showModal} />
         <PiiModelSection showModal={showModal} />
         {isNative && <StorageSection showModal={showModal} />}
 

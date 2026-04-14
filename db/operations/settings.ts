@@ -33,6 +33,8 @@ export async function setSetting(key: string, value: string): Promise<void> {
 // --- Well-known setting keys ---
 
 export const SETTING_STORAGE_ROOT = 'storage_root';
+export const SETTING_SELF_HOSTED_TRANSCRIPTION_URL = 'self_hosted_transcription_url';
+export const SETTING_SELF_HOSTED_TRANSCRIPTION_TOKEN = 'self_hosted_transcription_token';
 
 /** Get the configured storage root path, or null for default. */
 export async function getStorageRootSetting(): Promise<string | null> {
@@ -42,4 +44,24 @@ export async function getStorageRootSetting(): Promise<string | null> {
 /** Set the storage root path. */
 export async function setStorageRootSetting(path: string): Promise<void> {
   return setSetting(SETTING_STORAGE_ROOT, path);
+}
+
+/** Get the self-hosted transcription endpoint URL, or null if not configured. */
+export async function getSelfHostedTranscriptionUrl(): Promise<string | null> {
+  return getSetting(SETTING_SELF_HOSTED_TRANSCRIPTION_URL);
+}
+
+/** Set the self-hosted transcription endpoint URL. */
+export async function setSelfHostedTranscriptionUrl(url: string): Promise<void> {
+  return setSetting(SETTING_SELF_HOSTED_TRANSCRIPTION_URL, url);
+}
+
+/** Get the self-hosted transcription bearer token, or null if not configured. */
+export async function getSelfHostedTranscriptionToken(): Promise<string | null> {
+  return getSetting(SETTING_SELF_HOSTED_TRANSCRIPTION_TOKEN);
+}
+
+/** Set the self-hosted transcription bearer token. */
+export async function setSelfHostedTranscriptionToken(token: string): Promise<void> {
+  return setSetting(SETTING_SELF_HOSTED_TRANSCRIPTION_TOKEN, token);
 }

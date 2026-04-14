@@ -17,6 +17,7 @@ import { Recording } from '@/types';
 import * as Clipboard from 'expo-clipboard';
 import { getRecordingById, deleteRecording, updateRecording } from '@/db/operations/recordings';
 import { getApiKeys } from '@/db/operations/apikeys';
+import { getSelfHostedTranscriptionUrl } from '@/db/operations/settings';
 import { runProcessingPipeline } from '@/services/processing';
 import { getAudioFileUri } from '@/services/audioStorage';
 import { Modal } from '@/components/ui/Modal';
@@ -33,6 +34,7 @@ export default function RecordingDetailScreen() {
   const [retrying, setRetrying] = useState(false);
   const [retranscribing, setRetranscribing] = useState(false);
   const [hasMistralKey, setHasMistralKey] = useState(false);
+  const [hasSelfHostedUrl, setHasSelfHostedUrl] = useState(false);
   const { modal, setModal, showModal, hideModal } = useModal();
   const [audioUrl, setAudioUrl] = useState('');
 
@@ -63,6 +65,14 @@ export default function RecordingDetailScreen() {
         setHasMistralKey(!!keys.mistralKey);
       } catch {
         setHasMistralKey(false);
+      }
+    })();
+    (async () => {
+      try {
+        const url = await getSelfHostedTranscriptionUrl();
+        setHasSelfHostedUrl(!!url && url.trim().length > 0);
+      } catch {
+        setHasSelfHostedUrl(false);
       }
     })();
   }, []);
@@ -134,6 +144,22 @@ export default function RecordingDetailScreen() {
       showModal('Re-transcribed', 'Recording has been re-transcribed using the Voxtral API.', 'success');
     } catch (error) {
       console.error('[RecordingDetailScreen] Error during re-transcription:', error);
+      showModal('Error', error instanceof Error ? error.message : 'Failed to re-transcribe recording', 'error');
+    } finally {
+      setRetranscribing(false);
+      await loadRecording();
+    }
+  };
+
+  const handleRetranscribeSelfHosted = async () => {
+    if (!recording) return;
+    setRetranscribing(true);
+    try {
+      await runProcessingPipeline(recording.id, recording.projectId, { forceSelfHosted: true });
+      await loadRecording();
+      showModal('Re-transcribed', 'Recording has been re-transcribed using the self-hosted endpoint.', 'success');
+    } catch (error) {
+      console.error('[RecordingDetailScreen] Error during self-hosted re-transcription:', error);
       showModal('Error', error instanceof Error ? error.message : 'Failed to re-transcribe recording', 'error');
     } finally {
       setRetranscribing(false);
@@ -315,8 +341,10 @@ export default function RecordingDetailScreen() {
             anonymizedTranscription={recording.anonymizedTranscription}
             piiMappings={recording.piiMappings}
             hasMistralKey={hasMistralKey}
+            hasSelfHostedUrl={hasSelfHostedUrl}
             retranscribing={retranscribing}
             onRetranscribe={handleRetranscribe}
+            onRetranscribeSelfHosted={handleRetranscribeSelfHosted}
             onSpeakerRename={handleSpeakerRename}
           />
         )}
