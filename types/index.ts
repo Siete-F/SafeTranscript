@@ -22,7 +22,7 @@ export interface CustomField {
   type: 'text' | 'number' | 'date';
 }
 
-export type TranscriptionSource = 'whisper' | 'voxtral-api';
+export type TranscriptionSource = 'whisper' | 'voxtral-api' | 'self-hosted';
 
 export interface Recording {
   id: string;
