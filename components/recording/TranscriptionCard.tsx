@@ -305,7 +305,7 @@ export function TranscriptionCard({
               styles.retranscribeButtonText,
               !hasMistralKey && styles.retranscribeButtonTextDisabled,
             ]}>
-              {retranscribing ? 'Re-transcribing…' : 'Voxtral API'}
+              {retranscribing ? 'Re-transcribing…' : 'Mistral API'}
             </Text>
             {!hasMistralKey && (
               <Text style={styles.retranscribeHint}>Key required</Text>

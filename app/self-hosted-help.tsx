@@ -71,7 +71,7 @@ export default function SelfHostedHelpScreen() {
 
           <Text style={styles.subHeading}>Model weights</Text>
           <Text style={styles.body}>
-            Weights are downloaded automatically from HuggingFace on first start. You need a HuggingFace account and must accept the Voxtral model licence at{'\n'}
+            Weights are downloaded automatically from HuggingFace on first start. You need a HuggingFace account and must accept the Voxtral model license at{'\n'}
             <Text style={styles.link}>https://huggingface.co/mistralai/Voxtral-Mini-3B-2507</Text>
           </Text>
           <Text style={styles.body}>

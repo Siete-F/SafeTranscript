@@ -125,8 +125,8 @@ export async function transcribeWithSelfHosted(
       } as any);
     }
 
-    formData.append('model', 'voxtral-mini-latest');
-    formData.append('diarize', 'true');
+    // Do not hardcode a model name — the self-hosted server uses its own configured model.
+    // timestamp_granularities is sent so servers that support it return segment-level data.
     formData.append('timestamp_granularities[]', 'segment');
 
     if (sensitiveWords && sensitiveWords.length > 0) {

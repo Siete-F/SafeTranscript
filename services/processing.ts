@@ -88,10 +88,13 @@ export async function runProcessingPipeline(
       } else if (!options?.forceVoxtralApi && await shouldUseSelfHosted()) {
         console.log('[Pipeline] Using SELF-HOSTED endpoint for transcription');
         const selfHostedUrl = await getSelfHostedTranscriptionUrl();
+        if (!selfHostedUrl) {
+          throw new Error('Self-hosted transcription URL is not configured. Please set it in Settings.');
+        }
         const selfHostedToken = await getSelfHostedTranscriptionToken();
         transcriptionData = await transcribeWithSelfHosted(
           audioUri,
-          selfHostedUrl!,
+          selfHostedUrl,
           selfHostedToken ?? undefined,
           project.sensitiveWords,
         );

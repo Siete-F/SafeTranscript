@@ -21,6 +21,8 @@ interface SelfHostedTranscriptionSectionProps {
   showModal: (title: string, message: string, type: ModalType) => void;
 }
 
+const MAX_URL_DISPLAY_LENGTH = 40;
+
 export function SelfHostedTranscriptionSection({ showModal }: SelfHostedTranscriptionSectionProps) {
   const router = useRouter();
   const [savedUrl, setSavedUrl] = useState<string>('');
@@ -100,7 +102,9 @@ export function SelfHostedTranscriptionSection({ showModal }: SelfHostedTranscri
     router.push('/self-hosted-help');
   };
 
-  const urlDisplay = savedUrl ? (savedUrl.length > 40 ? `${savedUrl.substring(0, 40)}…` : savedUrl) : 'Not configured';
+  const urlDisplay = savedUrl
+    ? (savedUrl.length > MAX_URL_DISPLAY_LENGTH ? `${savedUrl.substring(0, MAX_URL_DISPLAY_LENGTH)}…` : savedUrl)
+    : 'Not configured';
   const tokenDisplay = savedToken ? '••••••••' : 'Not set';
 
   return (
