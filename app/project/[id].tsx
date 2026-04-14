@@ -19,7 +19,7 @@ import { colors, commonStyles } from '@/styles/commonStyles';
 import { Project, Recording } from '@/types';
 import { getProjectById, updateProject, deleteProject } from '@/db/operations/projects';
 import { getRecordingsByProject, deleteRecording, updateRecording } from '@/db/operations/recordings';
-import { exportProjectJSON, exportProjectXLS } from '@/db/operations/export';
+import { exportProjectJSON, exportProjectExcel } from '@/db/operations/export';
 import { exportsDir, exportFilePath } from '@/services/fileStorage';
 import { getAudioFileUri } from '@/services/audioStorage';
 import { runProcessingPipeline } from '@/services/processing';
@@ -150,11 +150,15 @@ export default function ProjectDetailScreen() {
   const handleExport = async (format: ExportFormat) => {
     setExporting(true);
     setExportingFormat(format);
+    const mimeTypes: Record<ExportFormat, string> = {
+      json: 'application/json',
+      xls: 'application/vnd.ms-excel',
+    };
     try {
       const data = format === 'json'
         ? await exportProjectJSON(id!)
-        : await exportProjectXLS(id!);
-      const mimeType = format === 'json' ? 'application/json' : 'application/vnd.ms-excel';
+        : await exportProjectExcel(id!);
+      const mimeType = mimeTypes[format];
       const fileName = `export.${format}`;
 
       if (Platform.OS === 'web') {
@@ -205,6 +209,10 @@ export default function ProjectDetailScreen() {
     } catch (error) {
       console.error('[ProjectDetailScreen] Error sharing export:', error);
     }
+  };
+
+  const handleExportModalClose = () => {
+    if (!exporting) setExportModalVisible(false);
   };
 
   const handleSaveConfig = async (updates: ProjectConfigUpdate) => {
@@ -499,7 +507,7 @@ export default function ProjectDetailScreen() {
         visible={exportModalVisible}
         exporting={exporting}
         exportingFormat={exportingFormat}
-        onClose={() => { if (!exporting) setExportModalVisible(false); }}
+        onClose={handleExportModalClose}
         onExport={handleExport}
       />
 

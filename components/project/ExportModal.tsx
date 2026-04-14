@@ -1,4 +1,3 @@
-
 import {
   Modal as RNModal,
   View,

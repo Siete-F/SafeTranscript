@@ -93,7 +93,7 @@ export async function exportProjectJSON(projectId: string): Promise<string> {
  * No external library needed — Excel, Numbers, and LibreOffice all support
  * this format and open it directly.
  */
-export async function exportProjectXLS(projectId: string): Promise<string> {
+export async function exportProjectExcel(projectId: string): Promise<string> {
   const { customFieldNames, rows } = await buildExportData(projectId);
 
   const headers = [
@@ -106,14 +106,13 @@ export async function exportProjectXLS(projectId: string): Promise<string> {
     'Status',
   ];
 
+  const toXmlCell = (value: string) =>
+    `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`;
+
   const xmlRows: string[] = [];
 
   // Header row
-  xmlRows.push(
-    '<Row>' +
-      headers.map((h) => `<Cell><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`).join('') +
-      '</Row>',
-  );
+  xmlRows.push('<Row>' + headers.map(toXmlCell).join('') + '</Row>');
 
   // Data rows
   rows.forEach((row) => {
@@ -125,7 +124,7 @@ export async function exportProjectXLS(projectId: string): Promise<string> {
       row.anonymizedTranscription,
       row.llmOutput,
       row.status,
-    ].map((val) => `<Cell><Data ss:Type="String">${escapeXml(val)}</Data></Cell>`);
+    ].map(toXmlCell);
 
     xmlRows.push('<Row>' + cells.join('') + '</Row>');
   });
