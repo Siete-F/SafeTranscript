@@ -19,12 +19,14 @@ import { colors, commonStyles } from '@/styles/commonStyles';
 import { Project, Recording } from '@/types';
 import { getProjectById, updateProject, deleteProject } from '@/db/operations/projects';
 import { getRecordingsByProject, deleteRecording, updateRecording } from '@/db/operations/recordings';
-import { exportProjectCSV } from '@/db/operations/export';
+import { exportProjectJSON, exportProjectXLS } from '@/db/operations/export';
+import { exportsDir, exportFilePath } from '@/services/fileStorage';
 import { getAudioFileUri } from '@/services/audioStorage';
 import { runProcessingPipeline } from '@/services/processing';
 import { Modal } from '@/components/ui/Modal';
 import { RecordingCard } from '@/components/project/RecordingCard';
 import { ProjectConfigModal, type ProjectConfigUpdate } from '@/components/project/ProjectConfigModal';
+import { ExportModal, type ExportFormat } from '@/components/project/ExportModal';
 import { useModal } from '@/hooks/useModal';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -49,6 +51,11 @@ export default function ProjectDetailScreen() {
 
   const [deleteProjectVisible, setDeleteProjectVisible] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
+
+  const [exportModalVisible, setExportModalVisible] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
+  const [exportedFileUri, setExportedFileUri] = useState<string | null>(null);
 
   const audioPlayer = useAudioPlayer(playableAudioUrl);
   const playerStatus = useAudioPlayerStatus(audioPlayer);
@@ -140,40 +147,63 @@ export default function ProjectDetailScreen() {
     router.push(`/recording/${recording.id}`);
   };
 
-  const handleExportCSV = async () => {
+  const handleExport = async (format: ExportFormat) => {
+    setExporting(true);
+    setExportingFormat(format);
     try {
-      const csvData = await exportProjectCSV(id!);
+      const data = format === 'json'
+        ? await exportProjectJSON(id!)
+        : await exportProjectXLS(id!);
+      const mimeType = format === 'json' ? 'application/json' : 'application/vnd.ms-excel';
+      const fileName = `export.${format}`;
 
       if (Platform.OS === 'web') {
-        try {
-          const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `project_${id}_export.csv`;
-          link.style.display = 'none';
-          document.body.appendChild(link);
-          link.click();
-          setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-          }, 100);
-          showModal('Export Complete', 'CSV file has been downloaded', 'success');
-        } catch (downloadError) {
-          throw new Error('Failed to trigger download: ' + (downloadError instanceof Error ? downloadError.message : 'Unknown error'));
-        }
+        const blob = new Blob([data], { type: `${mimeType};charset=utf-8;` });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `project_${id}_${fileName}`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 100);
+        setExportModalVisible(false);
+        showModal('Export Complete', `${format.toUpperCase()} file downloaded.`, 'success');
       } else {
-        const fileUri = `${FileSystem.documentDirectory}project_${id}_export.csv`;
-        await FileSystem.writeAsStringAsync(fileUri, csvData);
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(fileUri);
-        } else {
-          showModal('Export Complete', `CSV saved to: ${fileUri}`, 'success');
+        // Ensure exports directory exists and write file
+        const dir = exportsDir(id!);
+        const dirInfo = await FileSystem.getInfoAsync(dir);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
         }
+        const fileUri = exportFilePath(id!, format);
+        await FileSystem.writeAsStringAsync(fileUri, data);
+        setExportModalVisible(false);
+        setExportedFileUri(fileUri);
       }
     } catch (error) {
-      console.error('[ProjectDetailScreen] Error exporting CSV:', error);
-      showModal('Error', error instanceof Error ? error.message : 'Failed to export CSV', 'error');
+      console.error(`[ProjectDetailScreen] Error exporting ${format}:`, error);
+      setExportModalVisible(false);
+      showModal('Error', error instanceof Error ? error.message : `Failed to export ${format.toUpperCase()}`, 'error');
+    } finally {
+      setExporting(false);
+      setExportingFormat(null);
+    }
+  };
+
+  const handleShareExportedFile = async () => {
+    if (!exportedFileUri) return;
+    const uri = exportedFileUri;
+    setExportedFileUri(null);
+    try {
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri);
+      }
+    } catch (error) {
+      console.error('[ProjectDetailScreen] Error sharing export:', error);
     }
   };
 
@@ -389,7 +419,7 @@ export default function ProjectDetailScreen() {
 
         <TouchableOpacity
           style={[styles.actionButton, styles.secondaryButton]}
-          onPress={handleExportCSV}
+          onPress={() => setExportModalVisible(true)}
           activeOpacity={0.7}
         >
           <IconSymbol
@@ -399,7 +429,7 @@ export default function ProjectDetailScreen() {
             color={colors.primary}
           />
           <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>
-            Export CSV
+            Export
           </Text>
         </TouchableOpacity>
       </View>
@@ -464,6 +494,25 @@ export default function ProjectDetailScreen() {
           onDeleteProject={() => setDeleteProjectVisible(true)}
         />
       )}
+
+      <ExportModal
+        visible={exportModalVisible}
+        exporting={exporting}
+        exportingFormat={exportingFormat}
+        onClose={() => { if (!exporting) setExportModalVisible(false); }}
+        onExport={handleExport}
+      />
+
+      <Modal
+        visible={!!exportedFileUri}
+        title="Export Saved"
+        message={`File saved inside the project's exports folder.\n\nTap "Share" to open or share it with another app.`}
+        type="confirm"
+        onClose={() => setExportedFileUri(null)}
+        onConfirm={handleShareExportedFile}
+        confirmText="Share"
+        cancelText="Close"
+      />
     </SafeAreaView>
   );
 }

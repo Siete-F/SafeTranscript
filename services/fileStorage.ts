@@ -61,6 +61,14 @@ function llmResponsesDir(projectFolder: string): string {
   return `${projectDir(projectFolder)}llm_responses/`;
 }
 
+export function exportsDir(projectFolder: string): string {
+  return `${projectDir(projectFolder)}exports/`;
+}
+
+export function exportFilePath(projectFolder: string, format: 'json' | 'xls'): string {
+  return `${exportsDir(projectFolder)}export.${format}`;
+}
+
 // ---------------------------------------------------------------------------
 // Directory helpers
 // ---------------------------------------------------------------------------

@@ -1,71 +1,153 @@
 import { getRecordingsByProject } from './recordings';
+import type { Recording } from '@/types';
 
-/** Export completed recordings as a CSV string */
-export async function exportProjectCSV(projectId: string): Promise<string> {
+// ---------------------------------------------------------------------------
+// Shared data builder
+// ---------------------------------------------------------------------------
+
+interface ExportRow {
+  date: string;
+  time: string;
+  customFields: Record<string, string>;
+  transcription: string;
+  anonymizedTranscription: string;
+  llmOutput: string;
+  status: string;
+}
+
+interface ExportData {
+  customFieldNames: string[];
+  rows: ExportRow[];
+}
+
+async function buildExportData(projectId: string): Promise<ExportData> {
   const recordings = await getRecordingsByProject(projectId);
   const doneRecordings = recordings.filter((r) => r.status === 'done');
 
-  // Get unique custom field names
-  const customFieldNames = new Set<string>();
-  doneRecordings.forEach((r) => {
+  // Collect unique custom field names across all recordings
+  const customFieldNameSet = new Set<string>();
+  doneRecordings.forEach((r: Recording) => {
     if (r.customFieldValues) {
-      Object.keys(r.customFieldValues).forEach((key) => customFieldNames.add(key));
+      Object.keys(r.customFieldValues).forEach((key) => customFieldNameSet.add(key));
     }
   });
-  const customFieldArray = Array.from(customFieldNames).sort();
+  const customFieldNames = Array.from(customFieldNameSet).sort();
 
-  // Build CSV header
-  const headers = [
-    'Date',
-    'Time',
-    ...customFieldArray,
-    'Transcription Length',
-    'Anonymized',
-    'LLM Output',
-    'Status',
-  ];
-
-  const csvLines: string[] = [escapeCSVLine(headers)];
-
-  doneRecordings.forEach((recording) => {
+  const rows: ExportRow[] = doneRecordings.map((recording: Recording) => {
     const createdAt = new Date(recording.createdAt);
     const date = createdAt.toISOString().split('T')[0];
     const time = createdAt.toISOString().split('T')[1]?.substring(0, 8) || '';
 
-    const customValues = customFieldArray.map((field) => {
+    const customFields: Record<string, string> = {};
+    customFieldNames.forEach((field) => {
       const value = recording.customFieldValues?.[field];
-      return value !== undefined ? String(value) : '';
+      customFields[field] = value !== undefined ? String(value) : '';
     });
 
-    const transcriptionLength = recording.transcription?.length || 0;
-    const isAnonymized = recording.anonymizedTranscription ? 'Yes' : 'No';
-    const llmOutput = recording.llmOutput || '';
-
-    const row = [
+    return {
       date,
       time,
-      ...customValues,
-      String(transcriptionLength),
-      isAnonymized,
-      llmOutput,
-      recording.status,
-    ];
-
-    csvLines.push(escapeCSVLine(row));
+      customFields,
+      transcription: recording.transcription || '',
+      anonymizedTranscription: recording.anonymizedTranscription || '',
+      llmOutput: recording.llmOutput || '',
+      status: recording.status,
+    };
   });
 
-  return csvLines.join('\n');
+  return { customFieldNames, rows };
 }
 
-function escapeCSVLine(values: string[]): string {
-  return values
-    .map((value) => {
-      if (!value) return '""';
-      const escaped = String(value).replace(/"/g, '""');
-      if (escaped.includes(',') || escaped.includes('\n') || escaped.includes('"')) {
-        return `"${escaped}"`;
-      }
-      return escaped;
-    })
-    .join(',');
+// ---------------------------------------------------------------------------
+// JSON export
+// ---------------------------------------------------------------------------
+
+/** Export completed recordings as a JSON string. */
+export async function exportProjectJSON(projectId: string): Promise<string> {
+  const { customFieldNames, rows } = await buildExportData(projectId);
+
+  const output = rows.map((row) => {
+    const entry: Record<string, string> = {
+      date: row.date,
+      time: row.time,
+    };
+    customFieldNames.forEach((field) => {
+      entry[field] = row.customFields[field];
+    });
+    entry.transcription = row.transcription;
+    entry.anonymized_transcription = row.anonymizedTranscription;
+    entry.llm_output = row.llmOutput;
+    entry.status = row.status;
+    return entry;
+  });
+
+  return JSON.stringify(output, null, 2);
+}
+
+// ---------------------------------------------------------------------------
+// Excel (SpreadsheetML XML) export
+// ---------------------------------------------------------------------------
+
+/**
+ * Export completed recordings as a SpreadsheetML XML string (.xls).
+ * No external library needed — Excel, Numbers, and LibreOffice all support
+ * this format and open it directly.
+ */
+export async function exportProjectXLS(projectId: string): Promise<string> {
+  const { customFieldNames, rows } = await buildExportData(projectId);
+
+  const headers = [
+    'Date',
+    'Time',
+    ...customFieldNames,
+    'Transcription',
+    'Anonymized Transcription',
+    'LLM Output',
+    'Status',
+  ];
+
+  const xmlRows: string[] = [];
+
+  // Header row
+  xmlRows.push(
+    '<Row>' +
+      headers.map((h) => `<Cell><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`).join('') +
+      '</Row>',
+  );
+
+  // Data rows
+  rows.forEach((row) => {
+    const cells = [
+      row.date,
+      row.time,
+      ...customFieldNames.map((f) => row.customFields[f]),
+      row.transcription,
+      row.anonymizedTranscription,
+      row.llmOutput,
+      row.status,
+    ].map((val) => `<Cell><Data ss:Type="String">${escapeXml(val)}</Data></Cell>`);
+
+    xmlRows.push('<Row>' + cells.join('') + '</Row>');
+  });
+
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n' +
+    '          xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n' +
+    '  <Worksheet ss:Name="Export">\n' +
+    '    <Table>\n' +
+    xmlRows.map((r) => '      ' + r).join('\n') +
+    '\n    </Table>\n' +
+    '  </Worksheet>\n' +
+    '</Workbook>'
+  );
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
